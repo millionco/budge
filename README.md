@@ -1,4 +1,4 @@
-# <img src="https://github.com/millionco/budge/blob/main/apps/website/public/icon.svg?raw=true" width="60" align="center" /> budge
+# budge
 
 [![version](https://img.shields.io/npm/v/budge?style=flat&colorA=000000&colorB=000000)](https://npmjs.com/package/budge)
 [![downloads](https://img.shields.io/npm/dt/budge.svg?style=flat&colorA=000000&colorB=000000)](https://npmjs.com/package/budge)
