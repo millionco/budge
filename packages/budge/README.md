@@ -3,6 +3,8 @@
 [![version](https://img.shields.io/npm/v/budge?style=flat&colorA=000000&colorB=000000)](https://npmjs.com/package/budge)
 [![downloads](https://img.shields.io/npm/dt/budge.svg?style=flat&colorA=000000&colorB=000000)](https://npmjs.com/package/budge)
 
+**Tweak UI without going back-and-forth with AI.**
+
 A self-contained IIFE that puts a floating control bar on the page so you can fine-tune a single CSS property or Tailwind class change with the arrow keys.
 
 > See [`skills/budge/SKILL.md`](../../skills/budge/SKILL.md) for how budge fits into the visual editing workflow, and [`skills/budge/references/INSTALL.md`](../../skills/budge/references/INSTALL.md) for framework-specific install snippets.

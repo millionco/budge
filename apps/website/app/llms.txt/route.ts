@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const content = `# budge
 
-> the tiny design companion for your agent
+> tweak UI without going back-and-forth with AI
 
 ## What is budge?
 

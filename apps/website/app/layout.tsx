@@ -23,16 +23,16 @@ export const metadata: Metadata = {
       : "https://www.expect.dev",
   ),
   title: "budge",
-  description: "The tiny design companion for your agent.",
+  description: "Tweak UI without going back-and-forth with AI.",
   openGraph: {
     title: "budge",
-    description: "The tiny design companion for your agent.",
+    description: "Tweak UI without going back-and-forth with AI.",
     siteName: "budge",
   },
   twitter: {
     card: "summary_large_image",
     title: "budge",
-    description: "The tiny design companion for your agent.",
+    description: "Tweak UI without going back-and-forth with AI.",
   },
 };
 

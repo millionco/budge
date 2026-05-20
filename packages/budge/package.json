@@ -1,7 +1,7 @@
 {
   "name": "budge",
   "version": "0.0.1",
-  "description": "Floating, single-property visual tweaking widget for the web.",
+  "description": "Tweak UI without going back-and-forth with AI.",
   "keywords": [
     "css",
     "tailwind",

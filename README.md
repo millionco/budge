@@ -3,6 +3,8 @@
 [![version](https://img.shields.io/npm/v/budge?style=flat&colorA=000000&colorB=000000)](https://npmjs.com/package/budge)
 [![downloads](https://img.shields.io/npm/dt/budge.svg?style=flat&colorA=000000&colorB=000000)](https://npmjs.com/package/budge)
 
+**Tweak UI without going back-and-forth with AI.**
+
 A floating control bar for single-property visual changes. Drop the IIFE on any page, change a CSS value or Tailwind class once, and budge appears so the human (or agent) can fine-tune the result with the arrow keys before committing.
 
 The agent-side workflow lives in [`skills/budge/SKILL.md`](./skills/budge/SKILL.md). Framework-specific install snippets live in [`skills/budge/references/INSTALL.md`](./skills/budge/references/INSTALL.md).
