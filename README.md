@@ -5,7 +5,7 @@
 
 A floating control bar for single-property visual changes. Drop the IIFE on any page, change a CSS value or Tailwind class once, and budge appears so the human (or agent) can fine-tune the result with the arrow keys before committing.
 
-The agent-side workflow lives in [`SKILL.md`](./SKILL.md). Framework-specific install snippets live in [`references/INSTALL.md`](./references/INSTALL.md).
+The agent-side workflow lives in [`skills/budge/SKILL.md`](./skills/budge/SKILL.md). Framework-specific install snippets live in [`skills/budge/references/INSTALL.md`](./skills/budge/references/INSTALL.md).
 
 ## Quick start
 
@@ -29,8 +29,9 @@ import Script from "next/script";
 │   └── budge/            # the IIFE runtime (isolet-js build → dist/budge.iife.js)
 ├── apps/
 │   └── website/          # budge.design — Next.js site that hosts the IIFE + docs
-├── references/           # install snippets and the prebuilt IIFE referenced by the skill
-└── SKILL.md              # agent skill that triggers budge after atomic visual edits
+└── skills/
+    └── budge/            # agent skill (SKILL.md) + references/ used by the skill
+
 ```
 
 ## Develop

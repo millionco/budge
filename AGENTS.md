@@ -35,7 +35,7 @@ This is a pnpm monorepo:
 
 - `packages/budge/` — the IIFE runtime, built with **isolet-js** (not vite). Don't swap the build tool without coordinating.
 - `apps/website/` — the `budge.design` Next.js site.
-- `references/` and `SKILL.md` — agent-facing material; keep behavior and snippets in sync.
+- `skills/budge/` — agent-facing material (`SKILL.md` + `references/`); keep behavior and snippets in sync with `packages/budge`.
 
 No external services (databases, Docker, etc.) are required.
 

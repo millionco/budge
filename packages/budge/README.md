@@ -5,7 +5,7 @@
 
 A self-contained IIFE that puts a floating control bar on the page so you can fine-tune a single CSS property or Tailwind class change with the arrow keys.
 
-> See the top-level [`SKILL.md`](../../SKILL.md) for how budge fits into the visual editing workflow, and [`references/INSTALL.md`](../../references/INSTALL.md) for framework-specific install snippets.
+> See [`skills/budge/SKILL.md`](../../skills/budge/SKILL.md) for how budge fits into the visual editing workflow, and [`skills/budge/references/INSTALL.md`](../../skills/budge/references/INSTALL.md) for framework-specific install snippets.
 
 ## Install (CDN)
 
