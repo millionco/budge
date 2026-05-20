@@ -1,0 +1,59 @@
+{
+  "name": "budge",
+  "version": "0.0.1",
+  "description": "Floating, single-property visual tweaking widget for the web.",
+  "keywords": [
+    "css",
+    "tailwind",
+    "devtools",
+    "react",
+    "design",
+    "ui"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Aiden Bai",
+    "email": "aiden@million.dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/millionco/budge.git",
+    "directory": "packages/budge"
+  },
+  "homepage": "https://budge.design",
+  "bugs": {
+    "url": "https://github.com/millionco/budge/issues"
+  },
+  "files": [
+    "dist",
+    "package.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "browser": "dist/budge.iife.js",
+  "exports": {
+    "./package.json": "./package.json",
+    "./budge.iife.js": "./dist/budge.iife.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "isolet build --minify",
+    "dev": "isolet build --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@number-flow/react": "^0.6.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@web-kits/audio": "^0.1.0",
+    "calligraph": "^1.4.1",
+    "isolet-js": "^0.0.7",
+    "motion": "^11.0.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-grab": "^0.1.33"
+  }
+}
