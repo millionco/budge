@@ -106,6 +106,10 @@ nr changeset
 
 Follow the prompts to describe your changes. This helps maintain accurate changelogs.
 
+### Per-commit preview packages (when public)
+
+Once the repo is public, add `.github/workflows/publish-any-commit.yml` to ship a `pkg-pr-new` preview tarball on every push. The workflow lives in the template at `~/Developer/npm-package-template/.github/workflows/publish-any-commit.yml` — copy it back and update the package path to `./packages/budge`.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the MIT License.
