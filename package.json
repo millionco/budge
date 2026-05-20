@@ -23,15 +23,10 @@
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "@types/node": "^25.6.0",
-    "@types/validate-npm-package-name": "^4.0.2",
-    "@types/whois-json": "^2.0.4",
     "@voidzero-dev/vite-plus-core": "^0.1.20",
-    "tsx": "^4.21.0",
     "turbo": "^2.9.7",
     "typescript": "^6.0.3",
-    "validate-npm-package-name": "^7.0.2",
-    "vite-plus": "^0.1.20",
-    "whois-json": "^2.0.4"
+    "vite-plus": "^0.1.20"
   },
   "engines": {
     "node": ">=22",
