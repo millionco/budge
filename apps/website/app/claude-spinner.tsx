@@ -31,11 +31,12 @@ export function ClaudeSpinner({ message }: { message: string }) {
   const cyclePosition = Math.floor(time / GLIMMER_SPEED_MS);
   const glimmerIndex = message.length + 10 - (cyclePosition % cycleLength);
 
-  const characters = message.split("").map((character, index) => {
-    const distance = Math.abs(index - glimmerIndex);
+  const characters = message.split("").map((character, characterOffset) => {
+    const distance = Math.abs(characterOffset - glimmerIndex);
     const isShimmer = distance <= 1;
+    const characterKey = `${message.slice(0, characterOffset)}${character}`;
     return (
-      <span key={`${character}-${index}`} style={{ color: isShimmer ? SHIMMER_COLOR : BASE_COLOR }}>
+      <span key={characterKey} style={{ color: isShimmer ? SHIMMER_COLOR : BASE_COLOR }}>
         {character}
       </span>
     );

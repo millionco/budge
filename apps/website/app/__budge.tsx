@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useSyncExternalStore } from "react";
+import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { Calligraph } from "calligraph";
 import { defineSound, ensureReady } from "@web-kits/audio";
@@ -328,9 +329,40 @@ function getProps(property: string) {
 // Component
 // ---------------------------------------------------------------------------
 
-const BUDGE_GUIDE_Z_INDEX = 49;
 const BUDGE_OVERLAY_Z_INDEX = 50;
 const EASE_OUT_EXPO = "cubic-bezier(0.16, 1, 0.3, 1)";
+const subscribeMounted = () => () => {};
+const getMountedClientSnapshot = () => true;
+const getMountedServerSnapshot = () => false;
+
+interface BudgeRuntimeState {
+  targetEl: Element | null;
+  currentValue: string;
+  dismissed: boolean;
+  confirmed: boolean;
+  barVisible: boolean;
+  barMounted: boolean;
+  activeKey: "up" | "down" | null;
+  isNudging: boolean;
+  barHovered: boolean;
+}
+
+const INITIAL_BUDGE_RUNTIME_STATE: BudgeRuntimeState = {
+  targetEl: null,
+  currentValue: "",
+  dismissed: false,
+  confirmed: false,
+  barVisible: false,
+  barMounted: false,
+  activeKey: null,
+  isNudging: false,
+  barHovered: false,
+};
+
+const mergeBudgeRuntimeState = (
+  state: BudgeRuntimeState,
+  patch: Partial<BudgeRuntimeState>,
+): BudgeRuntimeState => ({ ...state, ...patch });
 
 export function Budge(props: { config?: BudgeConfig | null }) {
   if (process.env.NODE_ENV === "production") return null;
@@ -348,21 +380,28 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
     }
   }, []);
 
-  const [mounted, setMounted] = useState(false);
-  const [targetEl, setTargetEl] = useState<Element | null>(null);
-  const [currentValue, setCurrentValue] = useState("");
-  const [dismissed, setDismissed] = useState(false);
-  const [toastMsg] = useState<string | null>(null);
-  const [confirmed, setConfirmed] = useState(false);
-  const [barVisible, setBarVisible] = useState(false);
-  const [barMounted, setBarMounted] = useState(false);
+  const mounted = useSyncExternalStore(
+    subscribeMounted,
+    getMountedClientSnapshot,
+    getMountedServerSnapshot,
+  );
+  const [state, setRuntimeState] = useReducer(mergeBudgeRuntimeState, INITIAL_BUDGE_RUNTIME_STATE);
+  const {
+    targetEl,
+    currentValue,
+    dismissed,
+    confirmed,
+    barVisible,
+    barMounted,
+    activeKey,
+    isNudging,
+    barHovered,
+  } = state;
+  const toastMsg: string | null = null;
   const exitTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const lastIsColorRef = useRef(false);
 
   if (config) lastIsColorRef.current = config.type === "color";
-  const [activeKey, setActiveKey] = useState<"up" | "down" | null>(null);
-  const [isNudging, setIsNudging] = useState(false);
-  const [barHovered, setBarHovered] = useState(false);
   const holdIntervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const holdTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -383,8 +422,7 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
   const startHold = useCallback((dir: "up" | "down") => {
     const d = dir === "up" ? 1 : -1;
     stepValueRef.current?.(d, false);
-    setActiveKey(dir);
-    setIsNudging(true);
+    setRuntimeState({ activeKey: dir, isNudging: true });
     clearTimeout(budgeTimeoutRef.current);
     clearTimeout(holdTimeoutRef.current);
     clearInterval(holdIntervalRef.current);
@@ -398,31 +436,25 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
   const stopHold = useCallback(() => {
     clearTimeout(holdTimeoutRef.current);
     clearInterval(holdIntervalRef.current);
-    setActiveKey(null);
+    setRuntimeState({ activeKey: null });
     clearTimeout(budgeTimeoutRef.current);
-    budgeTimeoutRef.current = setTimeout(() => setIsNudging(false), 600);
-  }, []);
-
-  useEffect(() => {
-    setMounted(true);
+    budgeTimeoutRef.current = setTimeout(() => setRuntimeState({ isNudging: false }), 600);
   }, []);
 
   // Reset state when config changes
   useEffect(() => {
     if (!config) {
-      setTargetEl(null);
-      setDismissed(false);
+      setRuntimeState({ targetEl: null, dismissed: false });
       return;
     }
 
     const hash = configHash(config);
     if (sessionStorage.getItem("__ndg_dismissed") === hash) {
-      setDismissed(true);
+      setRuntimeState({ dismissed: true });
       return;
     }
 
-    setDismissed(false);
-    setCurrentValue(config.value);
+    setRuntimeState({ dismissed: false, currentValue: config.value });
     currentValueRef.current = config.value;
 
     const isColor = config.type === "color";
@@ -448,11 +480,11 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
   useEffect(() => {
     clearTimeout(exitTimeoutRef.current);
     if (shouldShow) {
-      setBarMounted(true);
-      exitTimeoutRef.current = setTimeout(() => setBarVisible(true), 30);
+      setRuntimeState({ barMounted: true });
+      exitTimeoutRef.current = setTimeout(() => setRuntimeState({ barVisible: true }), 30);
     } else {
-      setBarVisible(false);
-      exitTimeoutRef.current = setTimeout(() => setBarMounted(false), 400);
+      setRuntimeState({ barVisible: false });
+      exitTimeoutRef.current = setTimeout(() => setRuntimeState({ barMounted: false }), 400);
     }
     return () => clearTimeout(exitTimeoutRef.current);
   }, [shouldShow]);
@@ -460,7 +492,7 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
   // Find target element
   useEffect(() => {
     if (!config || dismissed) {
-      setTargetEl(null);
+      setRuntimeState({ targetEl: null });
       return;
     }
 
@@ -472,7 +504,7 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
       savedValueRef.current = useSvg
         ? found.getAttribute(firstProp) || ""
         : (found as HTMLElement).style.getPropertyValue(firstProp);
-      setTargetEl(found);
+      setRuntimeState({ targetEl: found });
       return;
     }
 
@@ -484,7 +516,7 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
         savedValueRef.current = useSvg
           ? el.getAttribute(firstProp) || ""
           : (el as HTMLElement).style.getPropertyValue(firstProp);
-        setTargetEl(el);
+        setRuntimeState({ targetEl: el });
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -512,8 +544,7 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
     if (targetEl) {
       targetEl.removeAttribute("data-budge-target");
     }
-    setDismissed(true);
-    setTargetEl(null);
+    setRuntimeState({ dismissed: true, targetEl: null });
   }, [config, targetEl]);
 
   // Keyboard handler
@@ -564,7 +595,7 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
 
       applyPreview(targetEl!, next);
       currentValueRef.current = next;
-      setCurrentValue(next);
+      setRuntimeState({ currentValue: next });
     }
 
     stepValueRef.current = stepValue;
@@ -583,12 +614,11 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
 
     function handleSubmit() {
       copyToClipboard(buildPrompt());
-      setConfirmed(true);
-      setIsNudging(true);
+      setRuntimeState({ confirmed: true, isNudging: true });
       playConfirm();
       clearTimeout(budgeTimeoutRef.current);
       budgeTimeoutRef.current = setTimeout(() => {
-        setConfirmed(false);
+        setRuntimeState({ confirmed: false });
         dismiss();
       }, 800);
     }
@@ -621,16 +651,16 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
         const orig = config!.original;
         applyPreview(targetEl!, orig);
         currentValueRef.current = orig;
-        setCurrentValue(orig);
+        setRuntimeState({ currentValue: orig });
         const match = String(orig).match(/([\d.]+)\s*(.*)/);
         if (match) {
           numericRef.current = parseFloat(orig) || 0;
           unitRef.current = match[2];
         }
         playUndo();
-        setIsNudging(true);
+        setRuntimeState({ isNudging: true });
         clearTimeout(budgeTimeoutRef.current);
-        budgeTimeoutRef.current = setTimeout(() => setIsNudging(false), 600);
+        budgeTimeoutRef.current = setTimeout(() => setRuntimeState({ isNudging: false }), 600);
       } else if (e.key === "Escape") {
         e.preventDefault();
         handleCancel();
@@ -640,23 +670,21 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         stepValue(1, e.shiftKey);
-        setActiveKey("up");
-        setIsNudging(true);
+        setRuntimeState({ activeKey: "up", isNudging: true });
         clearTimeout(budgeTimeoutRef.current);
-        budgeTimeoutRef.current = setTimeout(() => setIsNudging(false), 600);
+        budgeTimeoutRef.current = setTimeout(() => setRuntimeState({ isNudging: false }), 600);
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
         stepValue(-1, e.shiftKey);
-        setActiveKey("down");
-        setIsNudging(true);
+        setRuntimeState({ activeKey: "down", isNudging: true });
         clearTimeout(budgeTimeoutRef.current);
-        budgeTimeoutRef.current = setTimeout(() => setIsNudging(false), 600);
+        budgeTimeoutRef.current = setTimeout(() => setRuntimeState({ isNudging: false }), 600);
       }
     }
 
     function onKeyUp(e: KeyboardEvent) {
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        setActiveKey(null);
+        setRuntimeState({ activeKey: null });
       }
     }
 
@@ -684,7 +712,7 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
           confirmed={confirmed}
           visible={barVisible}
           barHovered={barHovered}
-          onBarHover={setBarHovered}
+          onBarHover={(nextBarHovered) => setRuntimeState({ barHovered: nextBarHovered })}
           propertyLabel={config?.property}
           unit={unitRef.current}
         />
@@ -696,247 +724,109 @@ function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
 }
 
 // ---------------------------------------------------------------------------
-// Guidelines — property-aware visualization
-// ---------------------------------------------------------------------------
-
-const GUIDE_COLOR = "#3B82F6";
-const GUIDE_FILL = "rgba(59, 130, 246, 0.13)";
-
-function activeSides(property: string) {
-  const p = property;
-  if (!p.includes("-") || p === "border-radius" || p === "font-size" || p === "line-height")
-    return { top: true, right: true, bottom: true, left: true };
-  if (p.endsWith("-top") || p.endsWith("-block-start"))
-    return { top: true, right: false, bottom: false, left: false };
-  if (p.endsWith("-right") || p.endsWith("-inline-end"))
-    return { top: false, right: true, bottom: false, left: false };
-  if (p.endsWith("-bottom") || p.endsWith("-block-end"))
-    return { top: false, right: false, bottom: true, left: false };
-  if (p.endsWith("-left") || p.endsWith("-inline-start"))
-    return { top: false, right: false, bottom: false, left: true };
-  if (p.includes("-block")) return { top: true, right: false, bottom: true, left: false };
-  if (p.includes("-inline")) return { top: false, right: true, bottom: false, left: true };
-  return { top: true, right: true, bottom: true, left: true };
-}
-
-function _Guidelines({
-  target,
-  expanded,
-  property,
-}: {
-  target: Element;
-  expanded: boolean;
-  property: string;
-}) {
-  const [rect, setRect] = useState<DOMRect | null>(null);
-  const [cs, setCs] = useState<CSSStyleDeclaration | null>(null);
-
-  useEffect(() => {
-    if (!target) return;
-    const update = () => {
-      setRect(target.getBoundingClientRect());
-      setCs(getComputedStyle(target));
-    };
-    update();
-    if (!expanded) return;
-    const id = setInterval(update, 60);
-    return () => clearInterval(id);
-  }, [target, expanded]);
-
-  if (!rect || !cs) return null;
-
-  const base: React.CSSProperties = {
-    position: "fixed",
-    pointerEvents: "none",
-    zIndex: BUDGE_GUIDE_Z_INDEX,
-    opacity: expanded ? 1 : 0,
-    transition: expanded ? "opacity 0.25s ease 0.05s" : "opacity 0.2s ease",
-  };
-
-  const outline = null;
-
-  const fill = (l: number, t: number, w: number, h: number, key: string) =>
-    w > 0 && h > 0 ? (
-      <div
-        key={key}
-        style={{ ...base, left: l, top: t, width: w, height: h, background: GUIDE_FILL }}
-      />
-    ) : null;
-
-  const isPadding = property.startsWith("padding");
-  const isMargin = property.startsWith("margin");
-  const isWidth = property === "width" || property === "max-width" || property === "min-width";
-  const isHeight = property === "height" || property === "max-height" || property === "min-height";
-  const isGap = property === "gap" || property === "row-gap" || property === "column-gap";
-
-  if (isPadding) {
-    const pt = parseFloat(cs.paddingTop) || 0;
-    const pr = parseFloat(cs.paddingRight) || 0;
-    const pb = parseFloat(cs.paddingBottom) || 0;
-    const pl = parseFloat(cs.paddingLeft) || 0;
-    const s = activeSides(property);
-    return (
-      <>
-        {outline}
-        {s.top && fill(rect.left, rect.top, rect.width, pt, "pt")}
-        {s.bottom && fill(rect.left, rect.bottom - pb, rect.width, pb, "pb")}
-        {s.left &&
-          fill(
-            rect.left,
-            rect.top + (s.top ? pt : 0),
-            pl,
-            rect.height - (s.top ? pt : 0) - (s.bottom ? pb : 0),
-            "pl",
-          )}
-        {s.right &&
-          fill(
-            rect.right - pr,
-            rect.top + (s.top ? pt : 0),
-            pr,
-            rect.height - (s.top ? pt : 0) - (s.bottom ? pb : 0),
-            "pr",
-          )}
-      </>
-    );
-  }
-
-  if (isMargin) {
-    const mt = parseFloat(cs.marginTop) || 0;
-    const mr = parseFloat(cs.marginRight) || 0;
-    const mb = parseFloat(cs.marginBottom) || 0;
-    const ml = parseFloat(cs.marginLeft) || 0;
-    const s = activeSides(property);
-    return (
-      <>
-        {outline}
-        {s.top && fill(rect.left, rect.top - mt, rect.width, mt, "mt")}
-        {s.bottom && fill(rect.left, rect.bottom, rect.width, mb, "mb")}
-        {s.left && fill(rect.left - ml, rect.top, ml, rect.height, "ml")}
-        {s.right && fill(rect.right, rect.top, mr, rect.height, "mr")}
-      </>
-    );
-  }
-
-  if (isWidth) {
-    const cy = rect.top + rect.height / 2;
-    return (
-      <>
-        {outline}
-        <div
-          style={{
-            ...base,
-            left: rect.left,
-            top: cy,
-            width: rect.width,
-            height: 1,
-            background: GUIDE_COLOR,
-            opacity: expanded ? 0.7 : 0,
-          }}
-        />
-        <div
-          style={{
-            ...base,
-            left: rect.left,
-            top: cy - 4,
-            width: 1,
-            height: 9,
-            background: GUIDE_COLOR,
-            opacity: expanded ? 0.7 : 0,
-          }}
-        />
-        <div
-          style={{
-            ...base,
-            left: rect.right - 1,
-            top: cy - 4,
-            width: 1,
-            height: 9,
-            background: GUIDE_COLOR,
-            opacity: expanded ? 0.7 : 0,
-          }}
-        />
-      </>
-    );
-  }
-
-  if (isHeight) {
-    const cx = rect.left + rect.width / 2;
-    return (
-      <>
-        {outline}
-        <div
-          style={{
-            ...base,
-            left: cx,
-            top: rect.top,
-            width: 1,
-            height: rect.height,
-            background: GUIDE_COLOR,
-            opacity: expanded ? 0.7 : 0,
-          }}
-        />
-        <div
-          style={{
-            ...base,
-            left: cx - 4,
-            top: rect.top,
-            width: 9,
-            height: 1,
-            background: GUIDE_COLOR,
-            opacity: expanded ? 0.7 : 0,
-          }}
-        />
-        <div
-          style={{
-            ...base,
-            left: cx - 4,
-            top: rect.bottom - 1,
-            width: 9,
-            height: 1,
-            background: GUIDE_COLOR,
-            opacity: expanded ? 0.7 : 0,
-          }}
-        />
-      </>
-    );
-  }
-
-  if (isGap) {
-    const children = Array.from(target.children);
-    if (children.length < 2) return outline;
-    const rects = children.map((c) => c.getBoundingClientRect());
-    const dir = cs.flexDirection || "row";
-    const isRow = dir === "row" || dir === "row-reverse";
-    const gaps: React.ReactNode[] = [];
-    for (let i = 0; i < rects.length - 1; i++) {
-      const a = rects[i];
-      const b = rects[i + 1];
-      if (isRow) {
-        const gl = Math.min(a.right, b.right);
-        const gr = Math.max(a.left, b.left);
-        if (gr > gl) gaps.push(fill(gl, rect.top, gr - gl, rect.height, `g${i}`));
-      } else {
-        const gt = Math.min(a.bottom, b.bottom);
-        const gb = Math.max(a.top, b.top);
-        if (gb > gt) gaps.push(fill(rect.left, gt, rect.width, gb - gt, `g${i}`));
-      }
-    }
-    return (
-      <>
-        {outline}
-        {gaps}
-      </>
-    );
-  }
-
-  return outline;
-}
-
-// ---------------------------------------------------------------------------
 // Bar UI
 // ---------------------------------------------------------------------------
 
 const FONT = "'Open Runde', system-ui, sans-serif";
+
+const BAR_CONTAINER_BASE_STYLE: CSSProperties = {
+  position: "fixed",
+  left: "50%",
+  zIndex: BUDGE_OVERLAY_Z_INDEX,
+  display: "flex",
+  height: 37,
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 9999,
+  padding: "0 16px",
+  fontSynthesis: "none",
+  WebkitFontSmoothing: "antialiased",
+  pointerEvents: "auto",
+  userSelect: "none",
+};
+
+const BAR_LABEL_BASE_STYLE: CSSProperties = {
+  position: "absolute",
+  bottom: "100%",
+  left: "50%",
+  pointerEvents: "none",
+  transformOrigin: "top left",
+  paddingBottom: 10,
+};
+
+const BAR_LABEL_TEXT_STYLE: CSSProperties = {
+  fontFamily: FONT,
+  fontSize: 12,
+  fontWeight: 500,
+  color: "#666",
+  letterSpacing: "0.01em",
+  whiteSpace: "nowrap",
+};
+
+const BAR_SURFACE_BASE_STYLE: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  borderRadius: 9999,
+  background: "#161616",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+};
+
+const BAR_CONTENT_STYLE: CSSProperties = {
+  position: "relative",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "100%",
+  height: "100%",
+};
+
+const COPIED_TEXT_STYLE: CSSProperties = {
+  color: "#fff",
+  fontFamily: FONT,
+  fontWeight: 500,
+  fontSize: 14.5,
+  lineHeight: "22px",
+  whiteSpace: "nowrap",
+  animation: `budge-copied-in 0.35s ${EASE_OUT_EXPO} both`,
+};
+
+const VALUE_TEXT_STYLE: CSSProperties = {
+  color: "#fff",
+  fontFamily: FONT,
+  fontWeight: 500,
+  fontSize: 14.5,
+  lineHeight: "22px",
+  whiteSpace: "nowrap",
+  fontVariantNumeric: "tabular-nums",
+  transition: "color 0.2s ease",
+};
+
+const UNIT_TEXT_STYLE: CSSProperties = {
+  color: "#fff",
+  fontFamily: FONT,
+  fontWeight: 500,
+  fontSize: 12,
+  lineHeight: "22px",
+  transition: "color 0.2s ease",
+  marginLeft: 1,
+};
+
+const TOAST_STYLE: CSSProperties = {
+  position: "fixed",
+  bottom: 68,
+  left: "50%",
+  transform: "translateX(-50%)",
+  background: "#161616",
+  color: "#fff",
+  padding: "6px 14px",
+  borderRadius: 9999,
+  fontSize: 13,
+  fontFamily: FONT,
+  fontWeight: 500,
+  zIndex: BUDGE_OVERLAY_Z_INDEX,
+  pointerEvents: "none",
+  WebkitFontSmoothing: "antialiased",
+};
 
 const ARROW_D =
   "M13.415 2.5C12.634 1.719 11.367 1.719 10.586 2.5L3.427 9.659C2.01 11.076 3.014 13.5 5.018 13.5H7V20C7 21.104 7.895 22 9 22H15C16.105 22 17 21.104 17 20V13.5H18.983C20.987 13.5 21.991 11.076 20.574 9.659L13.415 2.5Z";
@@ -1035,109 +925,51 @@ function Bar({
 
   const displayNum = value.replace(/[a-z%°]+$/i, "");
   const displayUnit = unit || "";
+  const barStyle: CSSProperties = {
+    ...BAR_CONTAINER_BASE_STYLE,
+    bottom: expanded ? 20 : 12,
+    transform: `translateX(-50%) translateY(${budgeY}px) scale(${baseScale})`,
+    opacity: visible ? (expanded || confirmed || barHovered ? 1 : 0.8) : 0,
+    transition: confirmed
+      ? `transform 0.3s ${EASE_OUT_EXPO}, bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease`
+      : expanded || barHovered
+        ? `transform 0.25s ${EASE_OUT_EXPO}, bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.15s ease`
+        : "transform 0.2s cubic-bezier(0.32, 0.72, 0, 1), bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease",
+  };
+  const propertyLabelStyle: CSSProperties = {
+    ...BAR_LABEL_BASE_STYLE,
+    transform: `scale(${1 / baseScale}) translateX(-50%) translateY(${expanded ? 0 : 8}px)`,
+    opacity: expanded ? 1 : 0,
+    filter: expanded ? "blur(0px)" : "blur(4px)",
+    transition: expanded
+      ? `opacity 0.2s ease, filter 0.2s ease, transform 0.3s ${EASE_OUT_EXPO}`
+      : "opacity 0.25s ease, filter 0.25s ease, transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
+  };
+  const barSurfaceStyle: CSSProperties = {
+    ...BAR_SURFACE_BASE_STYLE,
+    transformOrigin:
+      activeKey === "up" ? "center bottom" : activeKey === "down" ? "center top" : "center center",
+    transform: `scaleY(${activeKey ? 1.012 : 1})`,
+    transition: activeKey
+      ? "transform 0.03s cubic-bezier(0, 0, 0.2, 1)"
+      : `transform 0.4s ${EASE_OUT_EXPO}`,
+  };
 
   return (
     <div
       onPointerEnter={() => onBarHover(true)}
       onPointerLeave={() => onBarHover(false)}
-      style={{
-        position: "fixed",
-        bottom: expanded ? 20 : 12,
-        left: "50%",
-        transform: `translateX(-50%) translateY(${budgeY}px) scale(${baseScale})`,
-        opacity: visible ? (expanded || confirmed || barHovered ? 1 : 0.8) : 0,
-        zIndex: BUDGE_OVERLAY_Z_INDEX,
-        display: "flex",
-        height: 37,
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: 9999,
-        padding: "0 16px",
-        fontSynthesis: "none",
-        WebkitFontSmoothing: "antialiased",
-        pointerEvents: "auto",
-        userSelect: "none",
-        transition: confirmed
-          ? `transform 0.3s ${EASE_OUT_EXPO}, bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease`
-          : expanded || barHovered
-            ? `transform 0.25s ${EASE_OUT_EXPO}, bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.15s ease`
-            : "transform 0.2s cubic-bezier(0.32, 0.72, 0, 1), bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease",
-      }}
+      style={barStyle}
     >
       {propertyLabel && expanded && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: "100%",
-            left: "50%",
-            pointerEvents: "none",
-            transform: `scale(${1 / baseScale}) translateX(-50%) translateY(${expanded ? 0 : 8}px)`,
-            transformOrigin: "top left",
-            paddingBottom: 10,
-            opacity: expanded ? 1 : 0,
-            filter: expanded ? "blur(0px)" : "blur(4px)",
-            transition: expanded
-              ? `opacity 0.2s ease, filter 0.2s ease, transform 0.3s ${EASE_OUT_EXPO}`
-              : "opacity 0.25s ease, filter 0.25s ease, transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
-          }}
-        >
-          <span
-            style={{
-              fontFamily: FONT,
-              fontSize: 12,
-              fontWeight: 500,
-              color: "#666",
-              letterSpacing: "0.01em",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {propertyLabel}
-          </span>
+        <div style={propertyLabelStyle}>
+          <span style={BAR_LABEL_TEXT_STYLE}>{propertyLabel}</span>
         </div>
       )}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          borderRadius: 9999,
-          background: "#161616",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          transformOrigin:
-            activeKey === "up"
-              ? "center bottom"
-              : activeKey === "down"
-                ? "center top"
-                : "center center",
-          transform: `scaleY(${activeKey ? 1.012 : 1})`,
-          transition: activeKey
-            ? "transform 0.03s cubic-bezier(0, 0, 0.2, 1)"
-            : `transform 0.4s ${EASE_OUT_EXPO}`,
-        }}
-      />
-      <div
-        style={{
-          position: "relative",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: "100%",
-          height: "100%",
-        }}
-      >
+      <div style={barSurfaceStyle} />
+      <div style={BAR_CONTENT_STYLE}>
         {confirmed ? (
-          <span
-            style={{
-              color: "#fff",
-              fontFamily: FONT,
-              fontWeight: 500,
-              fontSize: 14.5,
-              lineHeight: "22px",
-              whiteSpace: "nowrap",
-              animation: `budge-copied-in 0.35s ${EASE_OUT_EXPO} both`,
-            }}
-          >
-            Prompt copied
-          </span>
+          <span style={COPIED_TEXT_STYLE}>Prompt copied</span>
         ) : (
           <>
             <div
@@ -1159,38 +991,10 @@ function Bar({
                   textAlign: "left",
                 }}
               >
-                <Calligraph
-                  variant="slots"
-                  animation="snappy"
-                  stagger={0}
-                  style={{
-                    color: "#fff",
-                    fontFamily: FONT,
-                    fontWeight: 500,
-                    fontSize: 14.5,
-                    lineHeight: "22px",
-                    whiteSpace: "nowrap",
-                    fontVariantNumeric: "tabular-nums",
-                    transition: "color 0.2s ease",
-                  }}
-                >
+                <Calligraph variant="slots" animation="snappy" stagger={0} style={VALUE_TEXT_STYLE}>
                   {displayNum}
                 </Calligraph>
-                {displayUnit && (
-                  <span
-                    style={{
-                      color: "#fff",
-                      fontFamily: FONT,
-                      fontWeight: 500,
-                      fontSize: 12,
-                      lineHeight: "22px",
-                      transition: "color 0.2s ease",
-                      marginLeft: 1,
-                    }}
-                  >
-                    {displayUnit}
-                  </span>
-                )}
+                {displayUnit && <span style={UNIT_TEXT_STYLE}>{displayUnit}</span>}
               </span>
             </div>
 
@@ -1217,26 +1021,5 @@ function Bar({
 }
 
 function Toast({ message }: { message: string }) {
-  return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: 68,
-        left: "50%",
-        transform: "translateX(-50%)",
-        background: "#161616",
-        color: "#fff",
-        padding: "6px 14px",
-        borderRadius: 9999,
-        fontSize: 13,
-        fontFamily: FONT,
-        fontWeight: 500,
-        zIndex: BUDGE_OVERLAY_Z_INDEX,
-        pointerEvents: "none",
-        WebkitFontSmoothing: "antialiased",
-      }}
-    >
-      {message}
-    </div>
-  );
+  return <div style={TOAST_STYLE}>{message}</div>;
 }

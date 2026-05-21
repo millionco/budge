@@ -732,20 +732,21 @@ async function attachSourceContext(el: HTMLElement, fingerprint: string) {
 
   try {
     const context = await getElementContext(el);
-    const source = getSourceFrame(context);
-    const elementContext = getPromptElementContext(context);
-    if (fingerprint !== autoConfigFingerprint || autoTarget !== el || !autoConfig?.slides) return;
-    autoConfig = {
-      ...autoConfig,
-      slides: autoConfig.slides.map((slide) => ({
-        ...slide,
-        file: source?.fileName ?? slide.file,
-        line: source?.lineNumber ?? slide.line,
-        elementContext: elementContext ?? slide.elementContext,
-      })),
-    };
-    autoConfigFingerprint = configFingerprint(autoConfig);
-    sync();
+    if (fingerprint === autoConfigFingerprint && autoTarget === el && autoConfig?.slides) {
+      const source = getSourceFrame(context);
+      const elementContext = getPromptElementContext(context);
+      autoConfig = {
+        ...autoConfig,
+        slides: autoConfig.slides.map((slide) => ({
+          ...slide,
+          file: source?.fileName ?? slide.file,
+          line: source?.lineNumber ?? slide.line,
+          elementContext: elementContext ?? slide.elementContext,
+        })),
+      };
+      autoConfigFingerprint = configFingerprint(autoConfig);
+      sync();
+    }
   } catch {
     // Source lookup is opportunistic; Budge still works without React metadata.
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useReducer, useRef } from "react";
 
 const ARROW_D =
   "M13.415 2.5C12.634 1.719 11.367 1.719 10.586 2.5L3.427 9.659C2.01 11.076 3.014 13.5 5.018 13.5H7V20C7 21.104 7.895 22 9 22H15C16.105 22 17 21.104 17 20V13.5H18.983C20.987 13.5 21.991 11.076 20.574 9.659L13.415 2.5Z";
@@ -34,9 +34,26 @@ const directionConfig: Record<
 
 type Phase = "idle" | "arrow-in" | "nudge" | "settle" | "arrow-out";
 
+interface LogoAnimationState {
+  phase: Phase;
+  direction: Direction;
+}
+
+const INITIAL_LOGO_ANIMATION_STATE: LogoAnimationState = {
+  phase: "idle",
+  direction: "push-down",
+};
+
+const mergeLogoAnimationState = (
+  state: LogoAnimationState,
+  patch: Partial<LogoAnimationState>,
+): LogoAnimationState => ({ ...state, ...patch });
+
 export function BudgeLogo({ children }: { children: React.ReactNode }) {
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [direction, setDirection] = useState<Direction>("push-down");
+  const [{ phase, direction }, setLogoAnimationState] = useReducer(
+    mergeLogoAnimationState,
+    INITIAL_LOGO_ANIMATION_STATE,
+  );
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
   const mountedRef = useRef(true);
 
@@ -45,8 +62,10 @@ export function BudgeLogo({ children }: { children: React.ReactNode }) {
     timeoutRef.current = setTimeout(() => {
       if (!mountedRef.current) return;
       const dirs: Direction[] = ["push-down", "push-up"];
-      setDirection(dirs[Math.floor(Math.random() * dirs.length)]);
-      setPhase("arrow-in");
+      setLogoAnimationState({
+        direction: dirs[Math.floor(Math.random() * dirs.length)],
+        phase: "arrow-in",
+      });
     }, delay);
   });
 
@@ -65,18 +84,21 @@ export function BudgeLogo({ children }: { children: React.ReactNode }) {
     let t: ReturnType<typeof setTimeout>;
     switch (phase) {
       case "arrow-in":
-        t = setTimeout(() => mountedRef.current && setPhase("nudge"), 180);
+        t = setTimeout(() => mountedRef.current && setLogoAnimationState({ phase: "nudge" }), 180);
         break;
       case "nudge":
-        t = setTimeout(() => mountedRef.current && setPhase("settle"), 100);
+        t = setTimeout(() => mountedRef.current && setLogoAnimationState({ phase: "settle" }), 100);
         break;
       case "settle":
-        t = setTimeout(() => mountedRef.current && setPhase("arrow-out"), 400);
+        t = setTimeout(
+          () => mountedRef.current && setLogoAnimationState({ phase: "arrow-out" }),
+          400,
+        );
         break;
       case "arrow-out":
         t = setTimeout(() => {
           if (!mountedRef.current) return;
-          setPhase("idle");
+          setLogoAnimationState({ phase: "idle" });
           scheduleNext();
         }, 350);
         break;

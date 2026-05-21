@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ComponentType } from "react";
+import type { ComponentType, CSSProperties } from "react";
 import { Calligraph as CalligraphImport } from "calligraph";
 import type { CalligraphProps } from "calligraph";
 import { defineSound, ensureReady } from "@web-kits/audio";
@@ -19,6 +19,96 @@ const EASE_OUT_EXPO = "cubic-bezier(0.16, 1, 0.3, 1)";
 const REDUCED_MOTION_MEDIA_QUERY = "(prefers-reduced-motion: reduce)";
 const ARROW_D =
   "M13.415 2.5C12.634 1.719 11.367 1.719 10.586 2.5L3.427 9.659C2.01 11.076 3.014 13.5 5.018 13.5H7V20C7 21.104 7.895 22 9 22H15C16.105 22 17 21.104 17 20V13.5H18.983C20.987 13.5 21.991 11.076 20.574 9.659L13.415 2.5Z";
+
+const BAR_SHELL_BASE_STYLE: CSSProperties = {
+  position: "relative",
+  display: "flex",
+  height: 37,
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 9999,
+  padding: "0 16px",
+  marginBottom: 24,
+  fontSynthesis: "none",
+  WebkitFontSmoothing: "antialiased",
+  userSelect: "none",
+};
+
+const BAR_LABEL_BASE_STYLE: CSSProperties = {
+  position: "absolute",
+  bottom: "100%",
+  left: "50%",
+  pointerEvents: "none",
+  transformOrigin: "top left",
+  paddingBottom: 10,
+};
+
+const BAR_LABEL_TEXT_BASE_STYLE: CSSProperties = {
+  fontFamily: FONT,
+  fontSize: 12,
+  fontWeight: 500,
+  letterSpacing: "0.01em",
+  whiteSpace: "nowrap",
+};
+
+const BAR_SURFACE_BASE_STYLE: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  borderRadius: 9999,
+  background: "#161616",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+};
+
+const BAR_CONTENT_STYLE: CSSProperties = {
+  position: "relative",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "100%",
+  height: "100%",
+};
+
+const COPIED_TEXT_STYLE: CSSProperties = {
+  color: "#fff",
+  fontFamily: FONT,
+  fontWeight: 500,
+  fontSize: 14.5,
+  lineHeight: "22px",
+  whiteSpace: "nowrap",
+  animation: `budge-copied-in 0.35s ${EASE_OUT_EXPO} both`,
+};
+
+const VALUE_TEXT_BASE_STYLE: CSSProperties = {
+  fontFamily: FONT,
+  fontWeight: 500,
+  fontSize: 14.5,
+  lineHeight: "22px",
+  whiteSpace: "nowrap",
+  fontVariantNumeric: "tabular-nums",
+  transition: "color 0.2s ease",
+};
+
+const UNIT_TEXT_BASE_STYLE: CSSProperties = {
+  fontFamily: FONT,
+  fontWeight: 500,
+  fontSize: 12,
+  lineHeight: "22px",
+  transition: "color 0.2s ease",
+  marginLeft: 1,
+};
+
+const TOKEN_LABEL_STYLE: CSSProperties = {
+  color: "#A7A7A7",
+  fontFamily: FONT,
+  fontWeight: 500,
+  fontSize: 12,
+  lineHeight: "22px",
+  marginLeft: 6,
+  whiteSpace: "nowrap",
+  display: "inline-block",
+  minWidth: 32,
+  textAlign: "left",
+};
 export type BudgeScale = "spacing" | "color" | "text" | "radius";
 
 export interface BudgeToken {
@@ -1080,6 +1170,52 @@ export function Budge({
     "margin-right 0.45s cubic-bezier(0.32, 0.72, 0, 1), " +
     "opacity 0.15s ease";
   const labelText = toastLabel ?? (propertySearch ? `${propertySearch} -> ${s.label}` : s.label);
+  const barShellStyle: CSSProperties = {
+    ...BAR_SHELL_BASE_STYLE,
+    transform: `translateY(${budgeY}px) scale(${baseScale})`,
+    opacity: f.idleOpacity
+      ? isBudging || confirmed || !slideRangeIdle || barHovered
+        ? 1
+        : 0.8
+      : 1,
+    transition: f.barPhysics
+      ? confirmed
+        ? `transform 0.3s ${EASE_OUT_EXPO}, opacity 0.2s ease`
+        : isBudging || barHovered || !slideRangeIdle
+          ? `transform 0.25s ${EASE_OUT_EXPO}, opacity 0.15s ease`
+          : "transform 0.2s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease"
+      : "opacity 0.3s ease",
+  };
+  const barLabelStyle: CSSProperties = {
+    ...BAR_LABEL_BASE_STYLE,
+    transform: `scale(${1 / baseScale}) translateX(-50%) translateY(${slideRangeVisible ? 0 : 8}px)`,
+    opacity: slideRangeVisible ? 1 : 0,
+    filter: slideRangeVisible ? "blur(0px)" : "blur(4px)",
+    transition: slideRangeVisible
+      ? `opacity 0.2s ease, filter 0.2s ease, transform 0.3s ${EASE_OUT_EXPO}`
+      : "opacity 0.25s ease, filter 0.25s ease, transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
+  };
+  const barLabelTextStyle: CSSProperties = {
+    ...BAR_LABEL_TEXT_BASE_STYLE,
+    color: toastLabel ? "#888" : "#666",
+  };
+  const barSurfaceStyle: CSSProperties = {
+    ...BAR_SURFACE_BASE_STYLE,
+    transformOrigin:
+      activeKey === "up" ? "center bottom" : activeKey === "down" ? "center top" : "center center",
+    transform: `scaleY(${activeKey ? 1.012 : 1})`,
+    transition: activeKey
+      ? "transform 0.03s cubic-bezier(0, 0, 0.2, 1)"
+      : `transform 0.4s ${EASE_OUT_EXPO}`,
+  };
+  const valueTextStyle: CSSProperties = {
+    ...VALUE_TEXT_BASE_STYLE,
+    color: typedOutOfRange ? "#A7A7A7" : "#fff",
+  };
+  const unitTextStyle: CSSProperties = {
+    ...UNIT_TEXT_BASE_STYLE,
+    color: typedOutOfRange ? "#A7A7A7" : "#fff",
+  };
 
   return (
     <>
@@ -1111,104 +1247,15 @@ export function Budge({
               className="shrink-0"
               onPointerEnter={() => setBarHovered(true)}
               onPointerLeave={() => setBarHovered(false)}
-              style={{
-                position: "relative",
-                display: "flex",
-                height: 37,
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 9999,
-                padding: "0 16px",
-                marginBottom: 24,
-                fontSynthesis: "none",
-                WebkitFontSmoothing: "antialiased",
-                userSelect: "none",
-                transform: `translateY(${budgeY}px) scale(${baseScale})`,
-                opacity: f.idleOpacity
-                  ? isBudging || confirmed || !slideRangeIdle || barHovered
-                    ? 1
-                    : 0.8
-                  : 1,
-                transition: f.barPhysics
-                  ? confirmed
-                    ? `transform 0.3s ${EASE_OUT_EXPO}, opacity 0.2s ease`
-                    : isBudging || barHovered || !slideRangeIdle
-                      ? `transform 0.25s ${EASE_OUT_EXPO}, opacity 0.15s ease`
-                      : "transform 0.2s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease"
-                  : "opacity 0.3s ease",
-              }}
+              style={barShellStyle}
             >
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: "100%",
-                  left: "50%",
-                  pointerEvents: "none",
-                  transform: `scale(${1 / baseScale}) translateX(-50%) translateY(${slideRangeVisible ? 0 : 8}px)`,
-                  transformOrigin: "top left",
-                  paddingBottom: 10,
-                  opacity: slideRangeVisible ? 1 : 0,
-                  filter: slideRangeVisible ? "blur(0px)" : "blur(4px)",
-                  transition: slideRangeVisible
-                    ? `opacity 0.2s ease, filter 0.2s ease, transform 0.3s ${EASE_OUT_EXPO}`
-                    : "opacity 0.25s ease, filter 0.25s ease, transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: FONT,
-                    fontSize: 12,
-                    fontWeight: 500,
-                    color: toastLabel ? "#888" : "#666",
-                    letterSpacing: "0.01em",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {labelText}
-                </span>
+              <div style={barLabelStyle}>
+                <span style={barLabelTextStyle}>{labelText}</span>
               </div>
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  borderRadius: 9999,
-                  background: "#161616",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                  transformOrigin:
-                    activeKey === "up"
-                      ? "center bottom"
-                      : activeKey === "down"
-                        ? "center top"
-                        : "center center",
-                  transform: `scaleY(${activeKey ? 1.012 : 1})`,
-                  transition: activeKey
-                    ? "transform 0.03s cubic-bezier(0, 0, 0.2, 1)"
-                    : `transform 0.4s ${EASE_OUT_EXPO}`,
-                }}
-              />
-              <div
-                style={{
-                  position: "relative",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: "100%",
-                  height: "100%",
-                }}
-              >
+              <div style={barSurfaceStyle} />
+              <div style={BAR_CONTENT_STYLE}>
                 {confirmed ? (
-                  <span
-                    key="copied"
-                    style={{
-                      color: "#fff",
-                      fontFamily: FONT,
-                      fontWeight: 500,
-                      fontSize: 14.5,
-                      lineHeight: "22px",
-                      whiteSpace: "nowrap",
-                      animation: `budge-copied-in 0.35s ${EASE_OUT_EXPO} both`,
-                    }}
-                  >
+                  <span key="copied" style={COPIED_TEXT_STYLE}>
                     Copied
                   </span>
                 ) : (
@@ -1237,49 +1284,13 @@ export function Budge({
                             variant="slots"
                             animation="snappy"
                             stagger={0}
-                            style={{
-                              color: typedOutOfRange ? "#A7A7A7" : "#fff",
-                              fontFamily: FONT,
-                              fontWeight: 500,
-                              fontSize: 14.5,
-                              lineHeight: "22px",
-                              whiteSpace: "nowrap",
-                              fontVariantNumeric: "tabular-nums",
-                              transition: "color 0.2s ease",
-                            }}
+                            style={valueTextStyle}
                           >
                             {displayNum}
                           </Calligraph>
-                          <span
-                            style={{
-                              color: typedOutOfRange ? "#A7A7A7" : "#fff",
-                              fontFamily: FONT,
-                              fontWeight: 500,
-                              fontSize: 12,
-                              lineHeight: "22px",
-                              transition: "color 0.2s ease",
-                              marginLeft: 1,
-                            }}
-                          >
-                            {displayUnit}
-                          </span>
+                          <span style={unitTextStyle}>{displayUnit}</span>
                           {matchedToken && (
-                            <span
-                              style={{
-                                color: "#A7A7A7",
-                                fontFamily: FONT,
-                                fontWeight: 500,
-                                fontSize: 12,
-                                lineHeight: "22px",
-                                marginLeft: 6,
-                                whiteSpace: "nowrap",
-                                display: "inline-block",
-                                minWidth: 32,
-                                textAlign: "left",
-                              }}
-                            >
-                              · {matchedToken.name}
-                            </span>
+                            <span style={TOKEN_LABEL_STYLE}>· {matchedToken.name}</span>
                           )}
                         </span>
                       ) : (
@@ -1291,50 +1302,10 @@ export function Budge({
                             textAlign: "left",
                           }}
                         >
-                          <span
-                            style={{
-                              color: typedOutOfRange ? "#A7A7A7" : "#fff",
-                              fontFamily: FONT,
-                              fontWeight: 500,
-                              fontSize: 14.5,
-                              lineHeight: "22px",
-                              whiteSpace: "nowrap",
-                              fontVariantNumeric: "tabular-nums",
-                              transition: "color 0.2s ease",
-                            }}
-                          >
-                            {displayNum}
-                          </span>
-                          <span
-                            style={{
-                              color: typedOutOfRange ? "#A7A7A7" : "#fff",
-                              fontFamily: FONT,
-                              fontWeight: 500,
-                              fontSize: 12,
-                              lineHeight: "22px",
-                              transition: "color 0.2s ease",
-                              marginLeft: 1,
-                            }}
-                          >
-                            {displayUnit}
-                          </span>
+                          <span style={valueTextStyle}>{displayNum}</span>
+                          <span style={unitTextStyle}>{displayUnit}</span>
                           {matchedToken && (
-                            <span
-                              style={{
-                                color: "#A7A7A7",
-                                fontFamily: FONT,
-                                fontWeight: 500,
-                                fontSize: 12,
-                                lineHeight: "22px",
-                                marginLeft: 6,
-                                whiteSpace: "nowrap",
-                                display: "inline-block",
-                                minWidth: 32,
-                                textAlign: "left",
-                              }}
-                            >
-                              · {matchedToken.name}
-                            </span>
+                            <span style={TOKEN_LABEL_STYLE}>· {matchedToken.name}</span>
                           )}
                         </span>
                       )}

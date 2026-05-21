@@ -1,7 +1,7 @@
 "use client";
 
 import { Calligraph } from "calligraph";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useReducer, useRef, type CSSProperties } from "react";
 import type { eventWithTime } from "@posthog/rrweb";
 import type { Replayer } from "@posthog/rrweb";
 import {
@@ -351,6 +351,27 @@ interface ReplayViewerProps {
   onAddEventsRef?: (handler: (newEvents: eventWithTime[]) => void) => void;
 }
 
+interface ReplayViewerState {
+  playbackBarClientReady: boolean;
+  playing: boolean;
+  currentTime: number;
+  speed: (typeof SPEEDS)[number];
+  browserFrameBackground: string | undefined;
+}
+
+const INITIAL_REPLAY_VIEWER_STATE: ReplayViewerState = {
+  playbackBarClientReady: false,
+  playing: false,
+  currentTime: 0,
+  speed: 1,
+  browserFrameBackground: undefined,
+};
+
+const mergeReplayViewerState = (
+  state: ReplayViewerState,
+  patch: Partial<ReplayViewerState>,
+): ReplayViewerState => ({ ...state, ...patch });
+
 export const ReplayViewer = ({
   events,
   steps,
@@ -358,13 +379,10 @@ export const ReplayViewer = ({
   autoPlay = false,
   onAddEventsRef,
 }: ReplayViewerProps) => {
-  const [playbackBarClientReady, setPlaybackBarClientReady] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
-  const [browserFrameBackground, setBrowserFrameBackground] = useState<string | undefined>(
-    undefined,
-  );
+  const [
+    { playbackBarClientReady, playing, currentTime, speed, browserFrameBackground },
+    setReplayViewerState,
+  ] = useReducer(mergeReplayViewerState, INITIAL_REPLAY_VIEWER_STATE);
   const playbackBarRef = useRef<HTMLDivElement>(null);
   const replayRef = useRef<HTMLDivElement>(null);
   const viewerShellRef = useRef<HTMLDivElement>(null);
@@ -408,7 +426,7 @@ export const ReplayViewer = ({
     replayerRef.current?.destroy();
     replayerRef.current = undefined;
     browserFrameBackgroundRef.current = undefined;
-    setBrowserFrameBackground(undefined);
+    setReplayViewerState({ browserFrameBackground: undefined });
   };
 
   const liveStallRef = useRef({ lastTime: -1, count: 0 });
@@ -418,7 +436,7 @@ export const ReplayViewer = ({
     if (nextBackground === browserFrameBackgroundRef.current) return;
 
     browserFrameBackgroundRef.current = nextBackground;
-    setBrowserFrameBackground(nextBackground);
+    setReplayViewerState({ browserFrameBackground: nextBackground });
   };
 
   const startTimer = () => {
@@ -431,7 +449,7 @@ export const ReplayViewer = ({
 
       const time = replayer.getCurrentTime();
       syncBrowserFrameBackground();
-      setCurrentTime(time);
+      setReplayViewerState({ currentTime: time });
 
       if (liveRef.current) {
         const stall = liveStallRef.current;
@@ -453,7 +471,7 @@ export const ReplayViewer = ({
 
       if (time >= duration) {
         clearInterval(timerRef.current);
-        setPlaying(false);
+        setReplayViewerState({ playing: false });
         return;
       }
     }, TIMER_INTERVAL_MS);
@@ -506,7 +524,7 @@ export const ReplayViewer = ({
   };
 
   useMountEffect(() => {
-    setPlaybackBarClientReady(true);
+    setReplayViewerState({ playbackBarClientReady: true });
   });
 
   useMountEffect(() => {
@@ -654,13 +672,13 @@ export const ReplayViewer = ({
       if (playing) {
         replayerRef.current.pause();
         clearInterval(timerRef.current);
-        setPlaying(false);
+        setReplayViewerState({ playing: false });
       } else {
         const resumeTime = !liveRef.current && currentTime >= replayDuration ? 0 : currentTime;
         replayerRef.current.play(resumeTime);
-        setCurrentTime(resumeTime);
+        setReplayViewerState({ currentTime: resumeTime });
         startTimer();
-        setPlaying(true);
+        setReplayViewerState({ playing: true });
       }
       return;
     }
@@ -687,10 +705,10 @@ export const ReplayViewer = ({
     }
 
     const startTime = liveRef.current ? replayDuration : Math.min(currentTime, replayDuration);
-    setCurrentTime(startTime);
+    setReplayViewerState({ currentTime: startTime });
     replayer.play(startTime);
     syncBrowserFrameBackground();
-    setPlaying(true);
+    setReplayViewerState({ playing: true });
     startTimer();
 
     cleanupLayoutRef.current = setupReplayScaling();
@@ -698,7 +716,7 @@ export const ReplayViewer = ({
   playPauseRef.current = handlePlay;
 
   const seekTo = (timeMs: number) => {
-    setCurrentTime(timeMs);
+    setReplayViewerState({ currentTime: timeMs });
 
     const replayer = replayerRef.current;
     if (!replayer) return;
@@ -798,7 +816,7 @@ export const ReplayViewer = ({
 
     if (!nextSpeed) return;
 
-    setSpeed(nextSpeed);
+    setReplayViewerState({ speed: nextSpeed });
     userSpeedRef.current = nextSpeed;
     isIdleSpeedRef.current = false;
     replayerRef.current?.setConfig({ speed: nextSpeed });
