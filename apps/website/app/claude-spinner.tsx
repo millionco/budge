@@ -3,10 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 const GLYPH_CHARACTERS = ["·", "✢", "✳", "✶", "✻", "✽"];
-const SPINNER_FRAMES = [
-  ...GLYPH_CHARACTERS,
-  ...[...GLYPH_CHARACTERS].reverse(),
-];
+const SPINNER_FRAMES = [...GLYPH_CHARACTERS, ...[...GLYPH_CHARACTERS].reverse()];
 const GLYPH_INTERVAL_MS = 120;
 const GLIMMER_SPEED_MS = 200;
 const BASE_COLOR = "#D74B25";
@@ -32,14 +29,13 @@ export function ClaudeSpinner({ message }: { message: string }) {
 
   const cycleLength = message.length + 20;
   const cyclePosition = Math.floor(time / GLIMMER_SPEED_MS);
-  const glimmerIndex =
-    message.length + 10 - (cyclePosition % cycleLength);
+  const glimmerIndex = message.length + 10 - (cyclePosition % cycleLength);
 
   const characters = message.split("").map((character, index) => {
     const distance = Math.abs(index - glimmerIndex);
     const isShimmer = distance <= 1;
     return (
-      <span key={index} style={{ color: isShimmer ? SHIMMER_COLOR : BASE_COLOR }}>
+      <span key={`${character}-${index}`} style={{ color: isShimmer ? SHIMMER_COLOR : BASE_COLOR }}>
         {character}
       </span>
     );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 const ARROW_D =
   "M13.415 2.5C12.634 1.719 11.367 1.719 10.586 2.5L3.427 9.659C2.01 11.076 3.014 13.5 5.018 13.5H7V20C7 21.104 7.895 22 9 22H15C16.105 22 17 21.104 17 20V13.5H18.983C20.987 13.5 21.991 11.076 20.574 9.659L13.415 2.5Z";
@@ -40,7 +40,7 @@ export function BudgeLogo({ children }: { children: React.ReactNode }) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
   const mountedRef = useRef(true);
 
-  const scheduleNext = useCallback(() => {
+  const scheduleNext = useEffectEvent(() => {
     const delay = 5000 + Math.random() * 9000;
     timeoutRef.current = setTimeout(() => {
       if (!mountedRef.current) return;
@@ -48,7 +48,7 @@ export function BudgeLogo({ children }: { children: React.ReactNode }) {
       setDirection(dirs[Math.floor(Math.random() * dirs.length)]);
       setPhase("arrow-in");
     }, delay);
-  }, []);
+  });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -57,7 +57,7 @@ export function BudgeLogo({ children }: { children: React.ReactNode }) {
       mountedRef.current = false;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [scheduleNext]);
+  }, []);
 
   useEffect(() => {
     if (phase === "idle") return;
@@ -82,7 +82,7 @@ export function BudgeLogo({ children }: { children: React.ReactNode }) {
         break;
     }
     return () => clearTimeout(t);
-  }, [phase, scheduleNext]);
+  }, [phase]);
 
   const cfg = directionConfig[direction];
   const isNudging = phase === "nudge";
@@ -128,12 +128,7 @@ export function BudgeLogo({ children }: { children: React.ReactNode }) {
           transition: arrowTransition,
         }}
       >
-        <path
-          fillRule="evenodd"
-          clipRule="evenodd"
-          d={ARROW_D}
-          fill="#A7A7A7"
-        />
+        <path fillRule="evenodd" clipRule="evenodd" d={ARROW_D} fill="#A7A7A7" />
       </svg>
     </span>
   );

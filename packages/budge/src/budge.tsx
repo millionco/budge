@@ -4,9 +4,8 @@ import { freeze, getElementContext, isFreezeActive, unfreeze } from "react-grab/
 import { Budge, setAssetBase } from "./widget";
 import type { BudgeElementContext, BudgeSlide } from "./widget";
 
-const budgeScript = typeof document !== "undefined"
-  ? document.currentScript as HTMLScriptElement | null
-  : null;
+const budgeScript =
+  typeof document !== "undefined" ? (document.currentScript as HTMLScriptElement | null) : null;
 
 const scriptBase = (() => {
   if (typeof document === "undefined") return "";
@@ -75,7 +74,9 @@ function readConfig(): BudgeRuntimeConfig | null {
   }
 }
 
-function hasSlides(config: BudgeRuntimeConfig | null): config is Required<Pick<BudgeRuntimeConfig, "slides">> & BudgeRuntimeConfig {
+function hasSlides(
+  config: BudgeRuntimeConfig | null,
+): config is Required<Pick<BudgeRuntimeConfig, "slides">> & BudgeRuntimeConfig {
   return !!config?.slides && Array.isArray(config.slides) && config.slides.length > 0;
 }
 
@@ -108,13 +109,15 @@ function sync() {
 
 function isLocalDevHost() {
   const host = location.hostname;
-  return host === "localhost" ||
+  return (
+    host === "localhost" ||
     host === "127.0.0.1" ||
     host === "::1" ||
     host.endsWith(".local") ||
     /^192\.168\./.test(host) ||
     /^10\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host);
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+  );
 }
 
 function readAutoDetectSetting() {
@@ -159,7 +162,7 @@ const TRACKED_PROPERTIES = [
   "max-height",
 ] as const;
 
-type TrackedProperty = typeof TRACKED_PROPERTIES[number];
+type TrackedProperty = (typeof TRACKED_PROPERTIES)[number];
 type StyleSnapshot = Record<TrackedProperty, string>;
 
 interface NumericValue {
@@ -176,11 +179,13 @@ interface PropertyChange {
 const snapshots = new WeakMap<Element, StyleSnapshot>();
 
 function shouldIgnoreElement(el: Element) {
-  return el === document.documentElement ||
+  return (
+    el === document.documentElement ||
     el === document.body ||
     el.closest(BUDGE_UI_SELECTOR) ||
     el.closest(BUDGE_CONFIG_SELECTOR) ||
-    el.closest(REACT_GRAB_UI_SELECTOR);
+    el.closest(REACT_GRAB_UI_SELECTOR)
+  );
 }
 
 function isFromBudgeUi(target: EventTarget | null) {
@@ -207,16 +212,6 @@ function getPrimitiveHighlight() {
   const el = document.createElement("div");
   el.setAttribute("data-budge-ui", "");
   el.setAttribute("data-budge-primitive-highlight", "");
-  el.style.cssText = [
-    "position:fixed",
-    "pointer-events:none",
-    "box-sizing:border-box",
-    "z-index:2147483646",
-    "border:2px solid " + BUDGE_HIGHLIGHT_BORDER,
-    "background:" + BUDGE_HIGHLIGHT_FILL,
-    "box-shadow:none",
-    "transition:left 80ms ease,top 80ms ease,width 80ms ease,height 80ms ease,opacity 80ms ease",
-  ].join(";");
   document.body.appendChild(el);
   primitiveHighlightEl = el;
   return el;
@@ -234,19 +229,29 @@ function updatePrimitiveHighlight(element: Element | null) {
     return;
   }
 
-  const el = getPrimitiveHighlight();
   const computed = getComputedStyle(element);
-  el.style.left = `${bounds.left}px`;
-  el.style.top = `${bounds.top}px`;
-  el.style.width = `${bounds.width}px`;
-  el.style.height = `${bounds.height}px`;
-  el.style.borderRadius = computed.borderRadius || "6px";
-  el.style.transform = "";
-  el.style.opacity = "1";
+  const el = getPrimitiveHighlight();
+  el.style.cssText = [
+    "position:fixed",
+    "pointer-events:none",
+    "box-sizing:border-box",
+    "z-index:50",
+    "border:2px solid " + BUDGE_HIGHLIGHT_BORDER,
+    "background:" + BUDGE_HIGHLIGHT_FILL,
+    "box-shadow:none",
+    "transition:left 80ms ease,top 80ms ease,width 80ms ease,height 80ms ease,opacity 80ms ease",
+    `left:${bounds.left}px`,
+    `top:${bounds.top}px`,
+    `width:${bounds.width}px`,
+    `height:${bounds.height}px`,
+    `border-radius:${computed.borderRadius || "6px"}`,
+    "transform:none",
+    "opacity:1",
+  ].join(";");
 }
 
 function isRecentBudgePreview() {
-  const lastPreviewAt = (window as any).__BUDGE_LAST_PREVIEW_AT__;
+  const lastPreviewAt = window.__BUDGE_LAST_PREVIEW_AT__;
   return typeof lastPreviewAt === "number" && performance.now() - lastPreviewAt < 250;
 }
 
@@ -305,7 +310,7 @@ function parseColorHue(value: string): NumericValue | null {
   else if (max === g) hue = (b - r) / delta + 2;
   else hue = (r - g) / delta + 4;
 
-  return { value: Math.round(((hue * 60) + 360) % 360), unit: "°" };
+  return { value: Math.round((hue * 60 + 360) % 360), unit: "°" };
 }
 
 function valuesChanged(before: NumericValue, after: NumericValue) {
@@ -327,8 +332,10 @@ function diffSnapshots(before: StyleSnapshot, after: StyleSnapshot): PropertyCha
 }
 
 function relatedProperties(property: string) {
-  if (property.startsWith("padding")) return ["padding-top", "padding-bottom", "padding-left", "padding-right"];
-  if (property.startsWith("margin")) return ["margin-top", "margin-bottom", "margin-left", "margin-right"];
+  if (property.startsWith("padding"))
+    return ["padding-top", "padding-bottom", "padding-left", "padding-right"];
+  if (property.startsWith("margin"))
+    return ["margin-top", "margin-bottom", "margin-left", "margin-right"];
   if (property.includes("gap")) return ["gap", "row-gap", "column-gap"];
   if (property === "font-size") return ["line-height", "letter-spacing"];
   if (property.startsWith("border-radius")) {
@@ -367,14 +374,22 @@ function valuesAreAligned(changes: PropertyChange[]) {
   const first = changes[0];
   return changes.every((change) => {
     const sameValue = Math.abs(change.after.value - first.after.value) < 0.5;
-    const sameDelta = Math.abs((change.after.value - change.before.value) - (first.after.value - first.before.value)) < 0.5;
+    const sameDelta =
+      Math.abs(
+        change.after.value - change.before.value - (first.after.value - first.before.value),
+      ) < 0.5;
     return sameValue || sameDelta;
   });
 }
 
 function choosePrimaryChange(changes: PropertyChange[]): PropertyChange | null {
   const byProperty = new Map(changes.map((change) => [change.property, change]));
-  const grouped: Array<{ properties: TrackedProperty[]; change: PropertyChange; label: string; property: string }> = [
+  const grouped: Array<{
+    properties: TrackedProperty[];
+    change: PropertyChange;
+    label: string;
+    property: string;
+  }> = [
     {
       properties: ["padding-top", "padding-right", "padding-bottom", "padding-left"],
       change: byProperty.get("padding-top")!,
@@ -426,8 +441,12 @@ function choosePrimaryChange(changes: PropertyChange[]): PropertyChange | null {
 
   for (const group of grouped) {
     if (!group.change) continue;
-    const groupChanges = group.properties.map((property) => byProperty.get(property)).filter(Boolean) as PropertyChange[];
-    if (groupChanges.length !== group.properties.length || !valuesAreAligned(groupChanges)) continue;
+    const groupChanges = group.properties.flatMap((property) => {
+      const change = byProperty.get(property);
+      return change ? [change] : [];
+    });
+    if (groupChanges.length !== group.properties.length || !valuesAreAligned(groupChanges))
+      continue;
     return { ...group.change, property: group.property as TrackedProperty };
   }
 
@@ -462,7 +481,12 @@ function choosePrimaryChange(changes: PropertyChange[]): PropertyChange | null {
   return null;
 }
 
-function buildSlide(property: string, label: string, before: NumericValue, after: NumericValue): BudgeSlide {
+function buildSlide(
+  property: string,
+  label: string,
+  before: NumericValue,
+  after: NumericValue,
+): BudgeSlide {
   const normalizedBefore = normalizeSlideValue(property, before);
   const normalizedAfter = normalizeSlideValue(property, after);
   const bounds = slideBounds(property, normalizedAfter.value, normalizedAfter.unit);
@@ -479,7 +503,9 @@ function buildSlide(property: string, label: string, before: NumericValue, after
 
 function buildSlides(primary: PropertyChange, after: StyleSnapshot): BudgeSlide[] {
   const property = primary.property;
-  const slides = [buildSlide(property, property.replace(/,/g, " + "), primary.before, primary.after)];
+  const slides = [
+    buildSlide(property, property.replace(/,/g, " + "), primary.before, primary.after),
+  ];
   const seen = new Set<string>([property]);
 
   for (const related of relatedProperties(property)) {
@@ -526,10 +552,17 @@ function selectionNumericValue(snapshot: StyleSnapshot, property: TrackedPropert
 
   if (property === "line-height") {
     const fontSize = numericValue(snapshot, "font-size");
-    return fontSize ? { value: Math.round(fontSize.value * 1.2 * 100) / 100, unit: fontSize.unit || "px" } : null;
+    return fontSize
+      ? { value: Math.round(fontSize.value * 1.2 * 100) / 100, unit: fontSize.unit || "px" }
+      : null;
   }
 
-  if (property === "letter-spacing" || property === "gap" || property === "row-gap" || property === "column-gap") {
+  if (
+    property === "letter-spacing" ||
+    property === "gap" ||
+    property === "row-gap" ||
+    property === "column-gap"
+  ) {
     return { value: 0, unit: "px" };
   }
 
@@ -623,10 +656,26 @@ function buildSelectionSlides(el: HTMLElement): BudgeSlide[] {
     "border-bottom-left-radius",
   ]);
   pushSlide("border-radius", "border radius", radius);
-  pushSlide("border-top-left-radius", "top left radius", numericValue(snapshot, "border-top-left-radius"));
-  pushSlide("border-top-right-radius", "top right radius", numericValue(snapshot, "border-top-right-radius"));
-  pushSlide("border-bottom-right-radius", "bottom right radius", numericValue(snapshot, "border-bottom-right-radius"));
-  pushSlide("border-bottom-left-radius", "bottom left radius", numericValue(snapshot, "border-bottom-left-radius"));
+  pushSlide(
+    "border-top-left-radius",
+    "top left radius",
+    numericValue(snapshot, "border-top-left-radius"),
+  );
+  pushSlide(
+    "border-top-right-radius",
+    "top right radius",
+    numericValue(snapshot, "border-top-right-radius"),
+  );
+  pushSlide(
+    "border-bottom-right-radius",
+    "bottom right radius",
+    numericValue(snapshot, "border-bottom-right-radius"),
+  );
+  pushSlide(
+    "border-bottom-left-radius",
+    "bottom left radius",
+    numericValue(snapshot, "border-bottom-left-radius"),
+  );
   pushSlide("border-width", "border width", numericValue(snapshot, "border-width"));
 
   pushSlide("width", "width", numericValue(snapshot, "width"));
@@ -657,12 +706,16 @@ function setAutoConfig(el: HTMLElement, slides: BudgeSlide[], source: AutoConfig
 }
 
 function getSourceFrame(context: ReactGrabElementContext) {
-  return context.stack.find((frame) => frame.fileName && frame.lineNumber) ??
+  return (
+    context.stack.find((frame) => frame.fileName && frame.lineNumber) ??
     context.stack.find((frame) => frame.fileName) ??
-    null;
+    null
+  );
 }
 
-function getPromptElementContext(context: ReactGrabElementContext): BudgeElementContext | undefined {
+function getPromptElementContext(
+  context: ReactGrabElementContext,
+): BudgeElementContext | undefined {
   const htmlPreview = context.htmlPreview.trim();
   if (!htmlPreview) return undefined;
 
@@ -675,6 +728,7 @@ function getPromptElementContext(context: ReactGrabElementContext): BudgeElement
 
 async function attachSourceContext(el: HTMLElement, fingerprint: string) {
   if (!autoConfig?.slides) return;
+  if (fingerprint !== autoConfigFingerprint || autoTarget !== el) return;
 
   try {
     const context = await getElementContext(el);
@@ -699,12 +753,14 @@ async function attachSourceContext(el: HTMLElement, fingerprint: string) {
 
 function isBudgeActivationEvent(event: KeyboardEvent) {
   const key = event.key.toLowerCase();
-  return (key === "e" || event.code === "KeyE") &&
+  return (
+    (key === "e" || event.code === "KeyE") &&
     event.metaKey &&
     !event.ctrlKey &&
     !event.altKey &&
     !event.shiftKey &&
-    !isFromBudgeUi(event.target);
+    !isFromBudgeUi(event.target)
+  );
 }
 
 function withReactGrabFreezeSuspended<T>(read: () => T): T {
@@ -726,8 +782,9 @@ function getPrimitiveTargetAt(x: number, y: number) {
 }
 
 function getPrimitiveElementsAt(x: number, y: number) {
-  return withReactGrabFreezeSuspended(() => document.elementsFromPoint(x, y))
-    .filter((el): el is HTMLElement => el instanceof HTMLElement && !shouldIgnoreElement(el));
+  return withReactGrabFreezeSuspended(() => document.elementsFromPoint(x, y)).filter(
+    (el): el is HTMLElement => el instanceof HTMLElement && !shouldIgnoreElement(el),
+  );
 }
 
 function getPrimitiveSelectionPath(target: HTMLElement | null) {
@@ -910,7 +967,9 @@ function startPrimitiveSelectionRuntime() {
       if (!primitiveSelectionActive || event.button !== 0 || !event.isPrimary) return;
       suppressNextPrimitiveClick();
       blockPrimitiveEvent(event);
-      selectPrimitiveTarget(primitiveSelectionTarget ?? getPrimitiveTargetAt(event.clientX, event.clientY));
+      selectPrimitiveTarget(
+        primitiveSelectionTarget ?? getPrimitiveTargetAt(event.clientX, event.clientY),
+      );
     },
     { capture: true },
   );
@@ -939,9 +998,10 @@ function startPrimitiveSelectionRuntime() {
       if (!primitiveSelectionActive && !suppressPrimitiveClick) return;
       blockPrimitiveEvent(event);
       if (primitiveSelectionActive) {
-        const target = event instanceof MouseEvent
-          ? primitiveSelectionTarget ?? getPrimitiveTargetAt(event.clientX, event.clientY)
-          : primitiveSelectionTarget;
+        const target =
+          event instanceof MouseEvent
+            ? (primitiveSelectionTarget ?? getPrimitiveTargetAt(event.clientX, event.clientY))
+            : primitiveSelectionTarget;
         selectPrimitiveTarget(target);
       }
       clearPrimitiveClickSuppression();

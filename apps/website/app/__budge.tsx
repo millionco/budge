@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Calligraph } from "calligraph";
 import { defineSound, ensureReady } from "@web-kits/audio";
@@ -179,8 +179,7 @@ function stepColor(css: string, direction: number): string | null {
   // --- hex (#rgb, #rrggbb, #rrggbbaa) ---
   if (/^#[0-9a-f]{3,8}$/i.test(css)) {
     let hex = css;
-    if (hex.length === 4)
-      hex = "#" + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+    if (hex.length === 4) hex = "#" + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
@@ -196,9 +195,7 @@ function stepColor(css: string, direction: number): string | null {
   }
 
   // --- color(display-p3 r g b) — values 0-1 ---
-  const p3 = css.match(
-    /color\(\s*display-p3\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)/
-  );
+  const p3 = css.match(/color\(\s*display-p3\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)/);
   if (p3) {
     const hsl = rgbToHSL(+p3[1] * 255, +p3[2] * 255, +p3[3] * 255);
     hsl.l = clamp(hsl.l + STEP, 0, 100);
@@ -207,9 +204,7 @@ function stepColor(css: string, direction: number): string | null {
   }
 
   // --- oklch(L C H) — L is 0-1 or 0%-100% ---
-  const ok = css.match(
-    /oklch\(\s*([\d.]+%?)\s+([\d.]+)\s+([\d.]+)\s*\)/
-  );
+  const ok = css.match(/oklch\(\s*([\d.]+%?)\s+([\d.]+)\s+([\d.]+)\s*\)/);
   if (ok) {
     const pct = ok[1].endsWith("%");
     let l = parseFloat(ok[1]);
@@ -222,9 +217,7 @@ function stepColor(css: string, direction: number): string | null {
   }
 
   // --- rgb(r, g, b) / rgba(r, g, b, a) ---
-  const rgb = css.match(
-    /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/
-  );
+  const rgb = css.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/);
   if (rgb) {
     const hsl = rgbToHSL(+rgb[1], +rgb[2], +rgb[3]);
     hsl.l = clamp(hsl.l + STEP, 0, 100);
@@ -238,9 +231,7 @@ function stepColor(css: string, direction: number): string | null {
   }
 
   // --- hsl(h, s%, l%) ---
-  const hsl = css.match(
-    /hsla?\(\s*([\d.]+)[,\s]+([\d.]+)%?[,\s]+([\d.]+)%?/
-  );
+  const hsl = css.match(/hsla?\(\s*([\d.]+)[,\s]+([\d.]+)%?[,\s]+([\d.]+)%?/);
   if (hsl) {
     const l = clamp(+hsl[3] + STEP, 0, 100);
     return `hsl(${hsl[1]}, ${hsl[2]}%, ${l}%)`;
@@ -252,9 +243,7 @@ function stepColor(css: string, direction: number): string | null {
   document.body.appendChild(el);
   const computed = getComputedStyle(el).color;
   el.remove();
-  const m = computed.match(
-    /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/
-  );
+  const m = computed.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/);
   if (!m) return null;
   const fhsl = rgbToHSL(+m[1], +m[2], +m[3]);
   fhsl.l = clamp(fhsl.l + STEP, 0, 100);
@@ -329,16 +318,27 @@ function configHash(c: BudgeConfig) {
 }
 
 function getProps(property: string) {
-  return property.split(",").map((p) => p.trim());
+  return property.split(",").flatMap((propertyName) => {
+    const trimmedPropertyName = propertyName.trim();
+    return trimmedPropertyName ? [trimmedPropertyName] : [];
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function Budge({ config }: { config?: BudgeConfig | null }) {
+const BUDGE_GUIDE_Z_INDEX = 49;
+const BUDGE_OVERLAY_Z_INDEX = 50;
+const EASE_OUT_EXPO = "cubic-bezier(0.16, 1, 0.3, 1)";
+
+export function Budge(props: { config?: BudgeConfig | null }) {
   if (process.env.NODE_ENV === "production") return null;
 
+  return <BudgeRuntime {...props} />;
+}
+
+function BudgeRuntime({ config }: { config?: BudgeConfig | null }) {
   useEffect(() => {
     if (!budgeStyleInjected) {
       const style = document.createElement("style");
@@ -352,7 +352,7 @@ export function Budge({ config }: { config?: BudgeConfig | null }) {
   const [targetEl, setTargetEl] = useState<Element | null>(null);
   const [currentValue, setCurrentValue] = useState("");
   const [dismissed, setDismissed] = useState(false);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [toastMsg] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [barVisible, setBarVisible] = useState(false);
   const [barMounted, setBarMounted] = useState(false);
@@ -372,9 +372,13 @@ export function Budge({ config }: { config?: BudgeConfig | null }) {
   const optionIndexRef = useRef(0);
   const currentValueRef = useRef("");
   const budgeTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const stepValueRef = useRef<((direction: number, shift: boolean, held?: boolean) => void) | undefined>(undefined);
+  const stepValueRef = useRef<
+    ((direction: number, shift: boolean, held?: boolean) => void) | undefined
+  >(undefined);
 
-  useEffect(() => { ensureReady(); }, []);
+  useEffect(() => {
+    ensureReady();
+  }, []);
 
   const startHold = useCallback((dir: "up" | "down") => {
     const d = dir === "up" ? 1 : -1;
@@ -399,19 +403,6 @@ export function Budge({ config }: { config?: BudgeConfig | null }) {
     budgeTimeoutRef.current = setTimeout(() => setIsNudging(false), 600);
   }, []);
 
-  const triggerBudge = useCallback(
-    (dir: "up" | "down") => {
-      const direction = dir === "up" ? 1 : -1;
-      stepValueRef.current?.(direction, false);
-      setActiveKey(dir);
-      setIsNudging(true);
-      clearTimeout(budgeTimeoutRef.current);
-      budgeTimeoutRef.current = setTimeout(() => setIsNudging(false), 600);
-      setTimeout(() => setActiveKey(null), 100);
-    },
-    []
-  );
-
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -435,13 +426,10 @@ export function Budge({ config }: { config?: BudgeConfig | null }) {
     currentValueRef.current = config.value;
 
     const isColor = config.type === "color";
-    const isOptions =
-      config.type === "options" && config.options && config.options.length > 0;
+    const isOptions = config.type === "options" && config.options && config.options.length > 0;
 
     if (isOptions) {
-      const idx = config.options!.findIndex(
-        (o) => String(o) === String(config.value)
-      );
+      const idx = config.options!.findIndex((o) => String(o) === String(config.value));
       optionIndexRef.current = idx >= 0 ? idx : 0;
     } else if (!isColor) {
       const match = String(config.value).match(/([\d.]+)\s*(.*)/);
@@ -476,8 +464,7 @@ export function Budge({ config }: { config?: BudgeConfig | null }) {
       return;
     }
 
-    const find = () =>
-      document.querySelector("[data-budge-target]") as Element | null;
+    const find = () => document.querySelector("[data-budge-target]") as Element | null;
     const firstProp = getProps(config.property)[0];
     const found = find();
     if (found) {
@@ -515,7 +502,7 @@ export function Budge({ config }: { config?: BudgeConfig | null }) {
         }
       }
     },
-    [config]
+    [config],
   );
 
   const dismiss = useCallback(() => {
@@ -534,8 +521,7 @@ export function Budge({ config }: { config?: BudgeConfig | null }) {
     if (!config || !targetEl || dismissed) return;
 
     const isColor = config.type === "color";
-    const isOptions =
-      config.type === "options" && config.options && config.options.length > 0;
+    const isOptions = config.type === "options" && config.options && config.options.length > 0;
     const step = config.step ?? 1;
     const min = config.min ?? -9999;
     const max = config.max ?? 9999;
@@ -547,8 +533,9 @@ export function Budge({ config }: { config?: BudgeConfig | null }) {
       if (isOptions) {
         const len = config!.options!.length;
         const prevIdx = optionIndexRef.current;
-        optionIndexRef.current = ((optionIndexRef.current + direction) % len + len) % len;
-        cycled = direction > 0 ? optionIndexRef.current < prevIdx : optionIndexRef.current > prevIdx;
+        optionIndexRef.current = (((optionIndexRef.current + direction) % len) + len) % len;
+        cycled =
+          direction > 0 ? optionIndexRef.current < prevIdx : optionIndexRef.current > prevIdx;
         next = String(config!.options![optionIndexRef.current]);
         if (cycled) playSwoosh();
         else playTick(held, direction > 0);
@@ -567,10 +554,10 @@ export function Budge({ config }: { config?: BudgeConfig | null }) {
         while (candidate > max + 1e-9) candidate -= period;
         while (candidate < min - 1e-9) candidate += period;
         numericRef.current = Math.round(candidate * 1000) / 1000;
-        cycled = numericRef.current !== prev && (direction > 0 ? numericRef.current < prev : numericRef.current > prev);
-        next = unitRef.current
-          ? numericRef.current + unitRef.current
-          : String(numericRef.current);
+        cycled =
+          numericRef.current !== prev &&
+          (direction > 0 ? numericRef.current < prev : numericRef.current > prev);
+        next = unitRef.current ? numericRef.current + unitRef.current : String(numericRef.current);
         if (cycled) playSwoosh();
         else playTick(held, direction > 0);
       }
@@ -583,15 +570,13 @@ export function Budge({ config }: { config?: BudgeConfig | null }) {
     stepValueRef.current = stepValue;
 
     function buildPrompt() {
-      const parts = [
-        "Set `" + config!.property + "` to `" + currentValueRef.current + "`",
-      ];
+      const parts = ["Set `" + config!.property + "` to `" + currentValueRef.current + "`"];
       if (config!.file) {
         parts.push("in `" + config!.file + "`");
         if (config!.line) parts.push("at line " + config!.line);
       }
       parts.push(
-        "— also apply this change to any related or sibling elements/components nearby that share the same style, where it makes logical sense to keep them consistent"
+        "also apply this change to any related or sibling elements/components nearby that share the same style, where it makes logical sense to keep them consistent",
       );
       return parts.join(" ");
     }
@@ -619,10 +604,7 @@ export function Budge({ config }: { config?: BudgeConfig | null }) {
           }
         } else {
           if (savedValueRef.current) {
-            (targetEl! as HTMLElement).style.setProperty(
-              prop,
-              savedValueRef.current
-            );
+            (targetEl! as HTMLElement).style.setProperty(prop, savedValueRef.current);
           } else {
             (targetEl! as HTMLElement).style.removeProperty(prop);
           }
@@ -709,7 +691,7 @@ export function Budge({ config }: { config?: BudgeConfig | null }) {
       )}
       {toastMsg && <Toast message={toastMsg} />}
     </>,
-    document.body
+    document.body,
   );
 }
 
@@ -722,12 +704,7 @@ const GUIDE_FILL = "rgba(59, 130, 246, 0.13)";
 
 function activeSides(property: string) {
   const p = property;
-  if (
-    !p.includes("-") ||
-    p === "border-radius" ||
-    p === "font-size" ||
-    p === "line-height"
-  )
+  if (!p.includes("-") || p === "border-radius" || p === "font-size" || p === "line-height")
     return { top: true, right: true, bottom: true, left: true };
   if (p.endsWith("-top") || p.endsWith("-block-start"))
     return { top: true, right: false, bottom: false, left: false };
@@ -737,14 +714,12 @@ function activeSides(property: string) {
     return { top: false, right: false, bottom: true, left: false };
   if (p.endsWith("-left") || p.endsWith("-inline-start"))
     return { top: false, right: false, bottom: false, left: true };
-  if (p.includes("-block"))
-    return { top: true, right: false, bottom: true, left: false };
-  if (p.includes("-inline"))
-    return { top: false, right: true, bottom: false, left: true };
+  if (p.includes("-block")) return { top: true, right: false, bottom: true, left: false };
+  if (p.includes("-inline")) return { top: false, right: true, bottom: false, left: true };
   return { top: true, right: true, bottom: true, left: true };
 }
 
-function Guidelines({
+function _Guidelines({
   target,
   expanded,
   property,
@@ -773,38 +748,26 @@ function Guidelines({
   const base: React.CSSProperties = {
     position: "fixed",
     pointerEvents: "none",
-    zIndex: 2147483646,
+    zIndex: BUDGE_GUIDE_Z_INDEX,
     opacity: expanded ? 1 : 0,
     transition: expanded ? "opacity 0.25s ease 0.05s" : "opacity 0.2s ease",
   };
 
   const outline = null;
 
-  const fill = (
-    l: number,
-    t: number,
-    w: number,
-    h: number,
-    key: string
-  ) =>
+  const fill = (l: number, t: number, w: number, h: number, key: string) =>
     w > 0 && h > 0 ? (
-      <div key={key} style={{ ...base, left: l, top: t, width: w, height: h, background: GUIDE_FILL }} />
+      <div
+        key={key}
+        style={{ ...base, left: l, top: t, width: w, height: h, background: GUIDE_FILL }}
+      />
     ) : null;
 
   const isPadding = property.startsWith("padding");
   const isMargin = property.startsWith("margin");
-  const isWidth =
-    property === "width" ||
-    property === "max-width" ||
-    property === "min-width";
-  const isHeight =
-    property === "height" ||
-    property === "max-height" ||
-    property === "min-height";
-  const isGap =
-    property === "gap" ||
-    property === "row-gap" ||
-    property === "column-gap";
+  const isWidth = property === "width" || property === "max-width" || property === "min-width";
+  const isHeight = property === "height" || property === "max-height" || property === "min-height";
+  const isGap = property === "gap" || property === "row-gap" || property === "column-gap";
 
   if (isPadding) {
     const pt = parseFloat(cs.paddingTop) || 0;
@@ -823,7 +786,7 @@ function Guidelines({
             rect.top + (s.top ? pt : 0),
             pl,
             rect.height - (s.top ? pt : 0) - (s.bottom ? pb : 0),
-            "pl"
+            "pl",
           )}
         {s.right &&
           fill(
@@ -831,7 +794,7 @@ function Guidelines({
             rect.top + (s.top ? pt : 0),
             pr,
             rect.height - (s.top ? pt : 0) - (s.bottom ? pb : 0),
-            "pr"
+            "pr",
           )}
       </>
     );
@@ -860,13 +823,37 @@ function Guidelines({
       <>
         {outline}
         <div
-          style={{ ...base, left: rect.left, top: cy, width: rect.width, height: 1, background: GUIDE_COLOR, opacity: expanded ? 0.7 : 0 }}
+          style={{
+            ...base,
+            left: rect.left,
+            top: cy,
+            width: rect.width,
+            height: 1,
+            background: GUIDE_COLOR,
+            opacity: expanded ? 0.7 : 0,
+          }}
         />
         <div
-          style={{ ...base, left: rect.left, top: cy - 4, width: 1, height: 9, background: GUIDE_COLOR, opacity: expanded ? 0.7 : 0 }}
+          style={{
+            ...base,
+            left: rect.left,
+            top: cy - 4,
+            width: 1,
+            height: 9,
+            background: GUIDE_COLOR,
+            opacity: expanded ? 0.7 : 0,
+          }}
         />
         <div
-          style={{ ...base, left: rect.right - 1, top: cy - 4, width: 1, height: 9, background: GUIDE_COLOR, opacity: expanded ? 0.7 : 0 }}
+          style={{
+            ...base,
+            left: rect.right - 1,
+            top: cy - 4,
+            width: 1,
+            height: 9,
+            background: GUIDE_COLOR,
+            opacity: expanded ? 0.7 : 0,
+          }}
         />
       </>
     );
@@ -878,13 +865,37 @@ function Guidelines({
       <>
         {outline}
         <div
-          style={{ ...base, left: cx, top: rect.top, width: 1, height: rect.height, background: GUIDE_COLOR, opacity: expanded ? 0.7 : 0 }}
+          style={{
+            ...base,
+            left: cx,
+            top: rect.top,
+            width: 1,
+            height: rect.height,
+            background: GUIDE_COLOR,
+            opacity: expanded ? 0.7 : 0,
+          }}
         />
         <div
-          style={{ ...base, left: cx - 4, top: rect.top, width: 9, height: 1, background: GUIDE_COLOR, opacity: expanded ? 0.7 : 0 }}
+          style={{
+            ...base,
+            left: cx - 4,
+            top: rect.top,
+            width: 9,
+            height: 1,
+            background: GUIDE_COLOR,
+            opacity: expanded ? 0.7 : 0,
+          }}
         />
         <div
-          style={{ ...base, left: cx - 4, top: rect.bottom - 1, width: 9, height: 1, background: GUIDE_COLOR, opacity: expanded ? 0.7 : 0 }}
+          style={{
+            ...base,
+            left: cx - 4,
+            top: rect.bottom - 1,
+            width: 9,
+            height: 1,
+            background: GUIDE_COLOR,
+            opacity: expanded ? 0.7 : 0,
+          }}
         />
       </>
     );
@@ -966,7 +977,7 @@ function Arrow({
         transform: `rotate(${down ? 180 : 0}deg) translateY(${active && !disabled ? -2.5 : 0}px) scale(${active && !disabled ? 1.08 : 1})`,
         transition: active
           ? "transform 0.03s cubic-bezier(0, 0, 0.2, 1)"
-          : "transform 0.45s cubic-bezier(0.34, 1.8, 0.64, 1)",
+          : `transform 0.45s ${EASE_OUT_EXPO}`,
       }}
     >
       <path
@@ -975,9 +986,7 @@ function Arrow({
         d={ARROW_D}
         fill={fill}
         style={{
-          transition: disabled
-            ? "fill 0.2s ease"
-            : active ? "fill 0.05s ease" : "fill 0.3s ease",
+          transition: disabled ? "fill 0.2s ease" : active ? "fill 0.05s ease" : "fill 0.3s ease",
         }}
       />
     </svg>
@@ -1021,7 +1030,7 @@ function Bar({
     "margin-right 0.45s cubic-bezier(0.32, 0.72, 0, 1), " +
     "opacity 0.15s ease";
 
-  const baseScale = !visible ? 0.5 : confirmed ? 1.02 : (expanded || barHovered) ? 1 : 0.8;
+  const baseScale = !visible ? 0.5 : confirmed ? 1.02 : expanded || barHovered ? 1 : 0.8;
   const budgeY = activeKey === "down" ? 1 : activeKey === "up" ? -1 : 0;
 
   const displayNum = value.replace(/[a-z%°]+$/i, "");
@@ -1037,7 +1046,7 @@ function Bar({
         left: "50%",
         transform: `translateX(-50%) translateY(${budgeY}px) scale(${baseScale})`,
         opacity: visible ? (expanded || confirmed || barHovered ? 1 : 0.8) : 0,
-        zIndex: 2147483647,
+        zIndex: BUDGE_OVERLAY_Z_INDEX,
         display: "flex",
         height: 37,
         alignItems: "center",
@@ -1049,130 +1058,159 @@ function Bar({
         pointerEvents: "auto",
         userSelect: "none",
         transition: confirmed
-          ? "transform 0.3s cubic-bezier(0.2, 0, 0, 1.2), bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease"
+          ? `transform 0.3s ${EASE_OUT_EXPO}, bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease`
           : expanded || barHovered
-            ? "transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.15s ease"
+            ? `transform 0.25s ${EASE_OUT_EXPO}, bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.15s ease`
             : "transform 0.2s cubic-bezier(0.32, 0.72, 0, 1), bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease",
       }}
     >
       {propertyLabel && expanded && (
-        <div style={{
-          position: "absolute",
-          bottom: "100%",
-          left: "50%",
-          pointerEvents: "none",
-          transform: `scale(${1 / baseScale}) translateX(-50%) translateY(${expanded ? 0 : 8}px)`,
-          transformOrigin: "top left",
-          paddingBottom: 10,
-          opacity: expanded ? 1 : 0,
-          filter: expanded ? "blur(0px)" : "blur(4px)",
-          transition: expanded
-            ? "opacity 0.2s ease, filter 0.2s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)"
-            : "opacity 0.25s ease, filter 0.25s ease, transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
-        }}>
-          <span style={{
-            fontFamily: FONT,
-            fontSize: 12,
-            fontWeight: 500,
-            color: "#666",
-            letterSpacing: "0.01em",
-            whiteSpace: "nowrap",
-          }}>
+        <div
+          style={{
+            position: "absolute",
+            bottom: "100%",
+            left: "50%",
+            pointerEvents: "none",
+            transform: `scale(${1 / baseScale}) translateX(-50%) translateY(${expanded ? 0 : 8}px)`,
+            transformOrigin: "top left",
+            paddingBottom: 10,
+            opacity: expanded ? 1 : 0,
+            filter: expanded ? "blur(0px)" : "blur(4px)",
+            transition: expanded
+              ? `opacity 0.2s ease, filter 0.2s ease, transform 0.3s ${EASE_OUT_EXPO}`
+              : "opacity 0.25s ease, filter 0.25s ease, transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: FONT,
+              fontSize: 12,
+              fontWeight: 500,
+              color: "#666",
+              letterSpacing: "0.01em",
+              whiteSpace: "nowrap",
+            }}
+          >
             {propertyLabel}
           </span>
         </div>
       )}
-      <div style={{
-        position: "absolute",
-        inset: 0,
-        borderRadius: 9999,
-        background: "#161616",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-        transformOrigin: activeKey === "up" ? "center bottom" : activeKey === "down" ? "center top" : "center center",
-        transform: `scaleY(${activeKey ? 1.012 : 1})`,
-        transition: activeKey
-          ? "transform 0.03s cubic-bezier(0, 0, 0.2, 1)"
-          : "transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
-      }} />
-      <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}>
-      {confirmed ? (
-        <span
-          style={{
-            color: "#fff",
-            fontFamily: FONT,
-            fontWeight: 500,
-            fontSize: 14.5,
-            lineHeight: "22px",
-            whiteSpace: "nowrap",
-            animation: "budge-copied-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both",
-          }}
-        >
-          Prompt copied
-        </span>
-      ) : (
-        <>
-          <div
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          borderRadius: 9999,
+          background: "#161616",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          transformOrigin:
+            activeKey === "up"
+              ? "center bottom"
+              : activeKey === "down"
+                ? "center top"
+                : "center center",
+          transform: `scaleY(${activeKey ? 1.012 : 1})`,
+          transition: activeKey
+            ? "transform 0.03s cubic-bezier(0, 0, 0.2, 1)"
+            : `transform 0.4s ${EASE_OUT_EXPO}`,
+        }}
+      />
+      <div
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "100%",
+          height: "100%",
+        }}
+      >
+        {confirmed ? (
+          <span
             style={{
-              maxWidth: expanded && !isColor ? 100 : 0,
-              marginRight: expanded && !isColor ? 1 : 0,
-              opacity: expanded && !isColor ? 1 : 0,
-              transition: expanded
-                ? expandTransition
-                : collapseTransition,
-              display: "flex",
-              alignItems: "center",
-              overflow: "visible",
+              color: "#fff",
+              fontFamily: FONT,
+              fontWeight: 500,
+              fontSize: 14.5,
+              lineHeight: "22px",
+              whiteSpace: "nowrap",
+              animation: `budge-copied-in 0.35s ${EASE_OUT_EXPO} both`,
             }}
           >
-            <span style={{ display: "inline-flex", alignItems: "baseline", minWidth: 44, textAlign: "left" }}>
-              <Calligraph
-                variant="slots"
-                animation="snappy"
-                stagger={0}
+            Prompt copied
+          </span>
+        ) : (
+          <>
+            <div
+              style={{
+                maxWidth: expanded && !isColor ? 100 : 0,
+                marginRight: expanded && !isColor ? 1 : 0,
+                opacity: expanded && !isColor ? 1 : 0,
+                transition: expanded ? expandTransition : collapseTransition,
+                display: "flex",
+                alignItems: "center",
+                overflow: "visible",
+              }}
+            >
+              <span
                 style={{
-                  color: "#fff",
-                  fontFamily: FONT,
-                  fontWeight: 500,
-                  fontSize: 14.5,
-                  lineHeight: "22px",
-                  whiteSpace: "nowrap",
-                  fontVariantNumeric: "tabular-nums",
-                  transition: "color 0.2s ease",
+                  display: "inline-flex",
+                  alignItems: "baseline",
+                  minWidth: 44,
+                  textAlign: "left",
                 }}
               >
-                {displayNum}
-              </Calligraph>
-              {displayUnit && (
-                <span style={{
-                  color: "#fff",
-                  fontFamily: FONT,
-                  fontWeight: 500,
-                  fontSize: 11,
-                  lineHeight: "22px",
-                  transition: "color 0.2s ease",
-                  marginLeft: 1,
-                }}>{displayUnit}</span>
-              )}
-            </span>
-          </div>
+                <Calligraph
+                  variant="slots"
+                  animation="snappy"
+                  stagger={0}
+                  style={{
+                    color: "#fff",
+                    fontFamily: FONT,
+                    fontWeight: 500,
+                    fontSize: 14.5,
+                    lineHeight: "22px",
+                    whiteSpace: "nowrap",
+                    fontVariantNumeric: "tabular-nums",
+                    transition: "color 0.2s ease",
+                  }}
+                >
+                  {displayNum}
+                </Calligraph>
+                {displayUnit && (
+                  <span
+                    style={{
+                      color: "#fff",
+                      fontFamily: FONT,
+                      fontWeight: 500,
+                      fontSize: 12,
+                      lineHeight: "22px",
+                      transition: "color 0.2s ease",
+                      marginLeft: 1,
+                    }}
+                  >
+                    {displayUnit}
+                  </span>
+                )}
+              </span>
+            </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <Arrow
-              down
-              active={activeKey === "down"}
-              onPointerDown={() => startHold("down")}
-              onPointerUp={stopHold}
-              onPointerLeave={stopHold}
-            />
-            <Arrow
-              active={activeKey === "up"}
-              onPointerDown={() => startHold("up")}
-              onPointerUp={stopHold}
-              onPointerLeave={stopHold}
-            />
-          </div>
-        </>
-      )}
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <Arrow
+                down
+                active={activeKey === "down"}
+                onPointerDown={() => startHold("down")}
+                onPointerUp={stopHold}
+                onPointerLeave={stopHold}
+              />
+              <Arrow
+                active={activeKey === "up"}
+                onPointerDown={() => startHold("up")}
+                onPointerUp={stopHold}
+                onPointerLeave={stopHold}
+              />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1193,7 +1231,7 @@ function Toast({ message }: { message: string }) {
         fontSize: 13,
         fontFamily: FONT,
         fontWeight: 500,
-        zIndex: 2147483647,
+        zIndex: BUDGE_OVERLAY_Z_INDEX,
         pointerEvents: "none",
         WebkitFontSmoothing: "antialiased",
       }}

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion";
-import { motion, AnimatePresence } from "motion/react";
+import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
 import { TextMorph } from "torph/react";
 
 import { cn } from "@/lib/utils";
@@ -66,57 +66,60 @@ function AccordionTrigger({ className, children, ...props }: AccordionPrimitive.
 function AccordionContent({
   className,
   children,
+  copyText = "",
   open,
   ...props
-}: AccordionPrimitive.Panel.Props & { open?: boolean }) {
+}: AccordionPrimitive.Panel.Props & { copyText?: string; open?: boolean }) {
   return (
-    <AnimatePresence initial={false}>
-      {open && (
-        <AccordionPrimitive.Panel
-          data-slot="accordion-content"
-          className="overflow-visible text-sm"
-          keepMounted
-          {...props}
-        >
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
+    <LazyMotion features={domAnimation}>
+      <AnimatePresence initial={false}>
+        {open && (
+          <AccordionPrimitive.Panel
+            data-slot="accordion-content"
+            className="overflow-visible text-sm"
+            keepMounted
+            {...props}
           >
-            <div
-              className={cn(
-                "pb-3 pl-4 pr-3.5 sm:pb-2.5 sm:pl-3.5 sm:pr-2.5 flex items-start justify-between gap-3 tracking-[-0.01em] text-[color(display-p3_0.435_0.435_0.435)] dark:text-[color(display-p3_0.655_0.655_0.655)] font-['ABC_Diatype',system-ui,sans-serif] text-[14px]/5 sm:text-xs/4.5",
-                className,
-              )}
+            <m.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
             >
-              <motion.span
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.15, delay: 0.05, ease: [0.25, 0.1, 0.25, 1] }}
-                className="cursor-pointer"
-                onClick={(e) => {
-                  const range = document.createRange();
-                  range.selectNodeContents(e.currentTarget);
-                  const sel = window.getSelection();
-                  sel?.removeAllRanges();
-                  sel?.addRange(range);
-                }}
+              <div
+                className={cn(
+                  "pb-3 pl-4 pr-3.5 sm:pb-2.5 sm:pl-3.5 sm:pr-2.5 flex items-start justify-between gap-3 tracking-[-0.01em] text-[color(display-p3_0.435_0.435_0.435)] dark:text-[color(display-p3_0.655_0.655_0.655)] font-['ABC_Diatype',system-ui,sans-serif] text-[14px]/5 sm:text-xs/4.5",
+                  className,
+                )}
               >
-                {children}
-              </motion.span>
-              <motion.div
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.15, delay: 0.1, ease: [0.25, 0.1, 0.25, 1] }}
-              >
-                <CopyButton text={typeof children === "string" ? children : ""} />
-              </motion.div>
-            </div>
-          </motion.div>
-        </AccordionPrimitive.Panel>
-      )}
-    </AnimatePresence>
+                <m.span
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.15, delay: 0.05, ease: [0.25, 0.1, 0.25, 1] }}
+                  className="cursor-pointer"
+                  onClick={(e) => {
+                    const range = document.createRange();
+                    range.selectNodeContents(e.currentTarget);
+                    const sel = window.getSelection();
+                    sel?.removeAllRanges();
+                    sel?.addRange(range);
+                  }}
+                >
+                  {children}
+                </m.span>
+                <m.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.15, delay: 0.1, ease: [0.25, 0.1, 0.25, 1] }}
+                >
+                  <CopyButton text={copyText} />
+                </m.div>
+              </div>
+            </m.div>
+          </AccordionPrimitive.Panel>
+        )}
+      </AnimatePresence>
+    </LazyMotion>
   );
 }
 

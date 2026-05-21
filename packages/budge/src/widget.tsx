@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ComponentType } from "react";
 import { Calligraph as CalligraphImport } from "calligraph";
+import type { CalligraphProps } from "calligraph";
 import { defineSound, ensureReady } from "@web-kits/audio";
 
-const Calligraph: any = typeof CalligraphImport === "function"
-  ? CalligraphImport
-  : ({ children, style }: { children?: ReactNode; style?: React.CSSProperties }) => (
-      <span style={style}>{children}</span>
-    );
+const Calligraph: ComponentType<CalligraphProps> =
+  typeof CalligraphImport === "function"
+    ? CalligraphImport
+    : ({ children, style }: CalligraphProps) => <span style={style}>{children}</span>;
 
 export const setAssetBase = (_base: string) => {};
 
 const FONT = "'Open Runde', system-ui, sans-serif";
 const SHAKE_KEYFRAMES = `@keyframes __budge-shake{0%,100%{translate:0}25%{translate:-2px}50%{translate:2px}75%{translate:-1px}}@keyframes budge-copied-in{0%{opacity:0;transform:scale(0.85)}100%{opacity:1;transform:scale(1)}}`;
 let shakeInjected = false;
+const BUDGE_OVERLAY_Z_INDEX = 50;
+const EASE_OUT_EXPO = "cubic-bezier(0.16, 1, 0.3, 1)";
+const REDUCED_MOTION_MEDIA_QUERY = "(prefers-reduced-motion: reduce)";
 const ARROW_D =
   "M13.415 2.5C12.634 1.719 11.367 1.719 10.586 2.5L3.427 9.659C2.01 11.076 3.014 13.5 5.018 13.5H7V20C7 21.104 7.895 22 9 22H15C16.105 22 17 21.104 17 20V13.5H18.983C20.987 13.5 21.991 11.076 20.574 9.659L13.415 2.5Z";
 export type BudgeScale = "spacing" | "color" | "text" | "radius";
@@ -44,6 +47,12 @@ export interface BudgeSlide {
   file?: string;
   line?: number;
   elementContext?: BudgeElementContext;
+}
+
+declare global {
+  interface Window {
+    __BUDGE_LAST_PREVIEW_AT__?: number;
+  }
 }
 
 type TokenBuckets = Record<BudgeScale, BudgeToken[]>;
@@ -106,7 +115,10 @@ function resolveScale(slide: BudgeSlide): BudgeScale | null {
 }
 
 function propertiesForSlide(property: string): string[] {
-  return property.split(",").map((p) => p.trim()).filter(Boolean);
+  return property.split(",").flatMap((propertyName) => {
+    const trimmedPropertyName = propertyName.trim();
+    return trimmedPropertyName ? [trimmedPropertyName] : [];
+  });
 }
 
 function tokensForSlide(slide: BudgeSlide, discovered: TokenBuckets): BudgeToken[] | null {
@@ -130,9 +142,8 @@ function formatSlideValue(
   discovered: TokenBuckets,
 ) {
   const scale = resolveScale(slide);
-  const snapTokens = snapEnabled && scale && scale !== "color"
-    ? tokensForSlide(slide, discovered)
-    : null;
+  const snapTokens =
+    snapEnabled && scale && scale !== "color" ? tokensForSlide(slide, discovered) : null;
   const matched = snapTokens ? matchToken(snapTokens, value) : null;
 
   if (matched && scale) return `var(--${scale}-${matched.name})`;
@@ -153,20 +164,23 @@ function promptElementContext(slides: BudgeSlide[]) {
     ? `Changed component (\`${context.componentName}\`):`
     : "Changed element:";
 
-  return [
-    "",
-    label,
-    "```html",
-    context.htmlPreview,
-    "```",
-  ].join("\n");
+  return ["", label, "```html", context.htmlPreview, "```"].join("\n");
 }
 
-function nextTokenIndex(tokens: BudgeToken[], value: number, direction: number, shift: boolean): number {
-  let curIdx = 0, bestDist = Infinity;
+function nextTokenIndex(
+  tokens: BudgeToken[],
+  value: number,
+  direction: number,
+  shift: boolean,
+): number {
+  let curIdx = 0,
+    bestDist = Infinity;
   for (let i = 0; i < tokens.length; i++) {
     const d = Math.abs((tokens[i].numeric ?? 0) - value);
-    if (d < bestDist) { bestDist = d; curIdx = i; }
+    if (d < bestDist) {
+      bestDist = d;
+      curIdx = i;
+    }
   }
   const onToken = Math.abs((tokens[curIdx].numeric ?? 0) - value) < 0.5;
   const mult = shift ? 10 : 1;
@@ -184,7 +198,7 @@ function nextTokenIndex(tokens: BudgeToken[], value: number, direction: number, 
 // period is (max - min + 1) so max+1 → min and min-1 → max.
 function wrapValue(v: number, min: number, max: number): number {
   const period = max - min + 1;
-  const offset = ((v - min) % period + period) % period;
+  const offset = (((v - min) % period) + period) % period;
   return min + offset;
 }
 
@@ -234,10 +248,27 @@ function bestSearchSlideIndex(slides: BudgeSlide[], query: string) {
 }
 
 const DEFAULT_SLIDES: BudgeSlide[] = [
-  { label: "font size", property: "font-size", min: 32, max: 86, value: 61, original: 61, unit: "px" },
+  {
+    label: "font size",
+    property: "font-size",
+    min: 32,
+    max: 86,
+    value: 61,
+    original: 61,
+    unit: "px",
+  },
   { label: "opacity", property: "opacity", min: 0, max: 100, value: 100, original: 100, unit: "%" },
   { label: "padding", property: "padding", min: 6, max: 48, value: 16, original: 16, unit: "px" },
-  { label: "color", property: "color", min: 0, max: 360, value: 220, original: 220, unit: "°", type: "color" },
+  {
+    label: "color",
+    property: "color",
+    min: 0,
+    max: 360,
+    value: 220,
+    original: 220,
+    unit: "°",
+    type: "color",
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -389,6 +420,20 @@ function playSwoosh() {
   swoosh();
 }
 
+function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const mediaQueryList = window.matchMedia(REDUCED_MOTION_MEDIA_QUERY);
+    setPrefersReducedMotion(mediaQueryList.matches);
+    const handleChange = () => setPrefersReducedMotion(mediaQueryList.matches);
+    mediaQueryList.addEventListener("change", handleChange);
+    return () => mediaQueryList.removeEventListener("change", handleChange);
+  }, []);
+
+  return prefersReducedMotion;
+}
+
 function Arrow({
   active,
   down,
@@ -425,7 +470,7 @@ function Arrow({
         transform: `rotate(${down ? 180 : 0}deg) translateY(${active && !disabled ? -2.5 : 0}px) scale(${active && !disabled ? 1.08 : 1})`,
         transition: active
           ? "transform 0.03s cubic-bezier(0, 0, 0.2, 1)"
-          : "transform 0.45s cubic-bezier(0.34, 1.8, 0.64, 1)",
+          : `transform 0.45s ${EASE_OUT_EXPO}`,
       }}
     >
       <path
@@ -434,36 +479,45 @@ function Arrow({
         d={ARROW_D}
         fill={fill}
         style={{
-          transition: disabled
-            ? "fill 0.2s ease"
-            : active ? "fill 0.05s ease" : "fill 0.3s ease",
+          transition: disabled ? "fill 0.2s ease" : active ? "fill 0.05s ease" : "fill 0.3s ease",
         }}
       />
     </svg>
   );
 }
 
-export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; slides?: BudgeSlide[] } = {}) {
+export function Budge({
+  autoFocus,
+  slides: slidesProp,
+}: { autoFocus?: boolean; slides?: BudgeSlide[] } = {}) {
   const SLIDES = slidesProp && slidesProp.length > 0 ? slidesProp : DEFAULT_SLIDES;
   const slidesRef = useRef(SLIDES);
   slidesRef.current = SLIDES;
   const slidesKey = JSON.stringify(SLIDES);
-  const f = { keyboard: true, expandValue: true, animatedDigits: true, arrowBounce: true, barPhysics: true, boundaryShake: true, sound: true, buttonFeedback: true, numberInput: true, shiftStep: true, idleOpacity: true, showLabel: true, showButtons: true, showText: true };
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const f = {
+    keyboard: true,
+    expandValue: true,
+    animatedDigits: !prefersReducedMotion,
+    arrowBounce: !prefersReducedMotion,
+    barPhysics: !prefersReducedMotion,
+    boundaryShake: true,
+    sound: true,
+    buttonFeedback: !prefersReducedMotion,
+    numberInput: true,
+    shiftStep: true,
+    idleOpacity: true,
+    showLabel: true,
+    showButtons: true,
+    showText: true,
+  };
   const [value, setValue] = useState(SLIDES[0].value);
   const [typedRaw, setTypedRaw] = useState<string | null>(null);
   const [activeKey, setActiveKey] = useState<"up" | "down" | null>(null);
   const [isBudging, setIsBudging] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
-  const [showPrompt, setShowPrompt] = useState(false);
-  const [pressedButton, setPressedButton] = useState<"reset" | "copy" | "prev" | "next" | "mute" | null>(null);
-  const [muted, setMuted] = useState(false);
-  const [resetHovered, setResetHovered] = useState(false);
-  const [copyHovered, setCopyHovered] = useState(false);
-  const [muteHovered, setMuteHovered] = useState(false);
-  const muteRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const [mutePos, setMutePos] = useState<{ top: number; left: number } | null>(null);
-  const slideValuesRef = useRef<number[]>(SLIDES.map(s => s.value));
+  const slideValuesRef = useRef<number[]>(SLIDES.map((s) => s.value));
   const containerRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const [slideRangeVisible, setSlideRangeVisible] = useState(false);
@@ -507,13 +561,11 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
     return () => cancelAnimationFrame(id);
   }, [autoFocus, slidesKey]);
 
-
-
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     function onWindowFocus() {
-      if (el && el.contains(document.activeElement) || document.activeElement === document.body) {
+      if ((el && el.contains(document.activeElement)) || document.activeElement === document.body) {
         el?.focus();
       }
     }
@@ -524,7 +576,7 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
   const [slide, setSlide] = useState(0);
   const slideRef = useRef(0);
   const s = SLIDES[slide] ?? SLIDES[0];
-  const soundOn = f.sound && !muted;
+  const soundOn = f.sound;
 
   useEffect(() => {
     const initial = SLIDES[0]?.value ?? 0;
@@ -536,7 +588,6 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
     setTypedRaw(null);
     setIsBudging(false);
     setConfirmed(false);
-    setShowPrompt(false);
     setActiveKey(null);
     setPropertySearch("");
     propertySearchRef.current = "";
@@ -547,7 +598,7 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
     clearTimeout(confirmedTimeoutRef.current);
     clearTimeout(propertySearchTimeoutRef.current);
     clearTimeout(pendingShortcutTimeoutRef.current);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slidesKey]);
 
   useEffect(() => {
@@ -556,9 +607,8 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
     const cs = SLIDES[slide] ?? SLIDES[0];
     if (!cs) return;
     const scale = resolveScale(cs);
-    const snapTokens = snapEnabled && scale && scale !== "color"
-      ? tokensForSlide(cs, discoveredRef.current)
-      : null;
+    const snapTokens =
+      snapEnabled && scale && scale !== "color" ? tokensForSlide(cs, discoveredRef.current) : null;
     const matched = snapTokens ? matchToken(snapTokens, value) : null;
     const nextValue = matched
       ? matched.value
@@ -567,78 +617,81 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
         : cs.unit === "%"
           ? String(value / 100)
           : `${value}${cs.unit}`;
-    (window as any).__BUDGE_LAST_PREVIEW_AT__ = performance.now();
+    window.__BUDGE_LAST_PREVIEW_AT__ = performance.now();
     for (const property of propertiesForSlide(cs.property)) {
       el.style.setProperty(property, nextValue);
     }
   }, [value, slide, SLIDES]);
 
-  const goToSlide = useCallback((direction: number) => {
-    const N = SLIDES.length;
-    const cur = slideRef.current;
-    const next = ((cur + direction) % N + N) % N;
-    slideValuesRef.current[cur] = valueRef.current;
-    slideRef.current = next;
-    setSlide(next);
-    const restored = slideValuesRef.current[next];
-    valueRef.current = restored;
-    setValue(restored);
-    setTypedRaw(null);
-    setIsBudging(false);
-    setConfirmed(false);
-    setShowPrompt(false);
-    setActiveKey(null);
-    digitBufferRef.current = "";
-    clearTimeout(digitTimeoutRef.current);
-    clearTimeout(budgeTimeoutRef.current);
-    clearTimeout(confirmedTimeoutRef.current);
+  const goToSlide = useCallback(
+    (direction: number) => {
+      const N = SLIDES.length;
+      const cur = slideRef.current;
+      const next = (((cur + direction) % N) + N) % N;
+      slideValuesRef.current[cur] = valueRef.current;
+      slideRef.current = next;
+      setSlide(next);
+      const restored = slideValuesRef.current[next];
+      valueRef.current = restored;
+      setValue(restored);
+      setTypedRaw(null);
+      setIsBudging(false);
+      setConfirmed(false);
+      setActiveKey(null);
+      digitBufferRef.current = "";
+      clearTimeout(digitTimeoutRef.current);
+      clearTimeout(budgeTimeoutRef.current);
+      clearTimeout(confirmedTimeoutRef.current);
 
-    clearTimeout(slideRangeTimeoutRef.current);
-    setSlideRangeVisible(true);
-    setSlideRangeIdle(false);
-    slideRangeTimeoutRef.current = setTimeout(() => {
-      setSlideRangeVisible(false);
-      setTimeout(() => setSlideRangeIdle(true), 400);
-    }, 800);
+      clearTimeout(slideRangeTimeoutRef.current);
+      setSlideRangeVisible(true);
+      setSlideRangeIdle(false);
+      slideRangeTimeoutRef.current = setTimeout(() => {
+        setSlideRangeVisible(false);
+        setTimeout(() => setSlideRangeIdle(true), 400);
+      }, 800);
 
-    if (soundOn) playTabSwitch();
+      if (soundOn) playTabSwitch();
 
-    containerRef.current?.focus();
-  }, [slidesKey, soundOn]);
+      containerRef.current?.focus();
+    },
+    [slidesKey, soundOn],
+  );
 
-  const selectSlide = useCallback((next: number) => {
-    const N = SLIDES.length;
-    if (next < 0 || next >= N || next === slideRef.current) return;
+  const selectSlide = useCallback(
+    (next: number) => {
+      const N = SLIDES.length;
+      if (next < 0 || next >= N || next === slideRef.current) return;
 
-    const cur = slideRef.current;
-    slideValuesRef.current[cur] = valueRef.current;
-    slideRef.current = next;
-    setSlide(next);
-    const restored = slideValuesRef.current[next];
-    valueRef.current = restored;
-    setValue(restored);
-    setTypedRaw(null);
-    setIsBudging(false);
-    setConfirmed(false);
-    setShowPrompt(false);
-    setActiveKey(null);
-    digitBufferRef.current = "";
-    clearTimeout(digitTimeoutRef.current);
-    clearTimeout(budgeTimeoutRef.current);
-    clearTimeout(confirmedTimeoutRef.current);
+      const cur = slideRef.current;
+      slideValuesRef.current[cur] = valueRef.current;
+      slideRef.current = next;
+      setSlide(next);
+      const restored = slideValuesRef.current[next];
+      valueRef.current = restored;
+      setValue(restored);
+      setTypedRaw(null);
+      setIsBudging(false);
+      setConfirmed(false);
+      setActiveKey(null);
+      digitBufferRef.current = "";
+      clearTimeout(digitTimeoutRef.current);
+      clearTimeout(budgeTimeoutRef.current);
+      clearTimeout(confirmedTimeoutRef.current);
 
-    clearTimeout(slideRangeTimeoutRef.current);
-    setSlideRangeVisible(true);
-    setSlideRangeIdle(false);
-    slideRangeTimeoutRef.current = setTimeout(() => {
-      setSlideRangeVisible(false);
-      setTimeout(() => setSlideRangeIdle(true), 400);
-    }, 1000);
+      clearTimeout(slideRangeTimeoutRef.current);
+      setSlideRangeVisible(true);
+      setSlideRangeIdle(false);
+      slideRangeTimeoutRef.current = setTimeout(() => {
+        setSlideRangeVisible(false);
+        setTimeout(() => setSlideRangeIdle(true), 400);
+      }, 1000);
 
-    if (soundOn) playTabSwitch();
-    containerRef.current?.focus();
-  }, [slidesKey, soundOn]);
-
+      if (soundOn) playTabSwitch();
+      containerRef.current?.focus();
+    },
+    [slidesKey, soundOn],
+  );
 
   const applyDigitBufferRef = useRef(() => {});
   applyDigitBufferRef.current = () => {
@@ -657,59 +710,57 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
     }
   };
 
-  const step = useCallback((direction: number, shift = false, held = false) => {
-    const cs = SLIDES[slideRef.current];
-    const scale = resolveScale(cs);
-    const snapTokens = snapEnabledRef.current && scale && scale !== "color"
-      ? tokensForSlide(cs, discoveredRef.current)
-      : null;
+  const step = useCallback(
+    (direction: number, shift = false, held = false) => {
+      const cs = SLIDES[slideRef.current];
+      const scale = resolveScale(cs);
+      const snapTokens =
+        snapEnabledRef.current && scale && scale !== "color"
+          ? tokensForSlide(cs, discoveredRef.current)
+          : null;
 
-    const prev = valueRef.current;
-    let next: number;
-    if (snapTokens) {
-      const rawIdx = nextTokenIndex(snapTokens, valueRef.current, direction, shift);
-      const len = snapTokens.length;
-      const idx = ((rawIdx % len) + len) % len;
-      next = snapTokens[idx].numeric ?? valueRef.current;
-    } else {
-      const mult = (f.shiftStep && shift) ? 10 : 1;
-      next = wrapValue(valueRef.current + direction * mult, cs.min, cs.max);
-    }
+      const prev = valueRef.current;
+      let next: number;
+      if (snapTokens) {
+        const rawIdx = nextTokenIndex(snapTokens, valueRef.current, direction, shift);
+        const len = snapTokens.length;
+        const idx = ((rawIdx % len) + len) % len;
+        next = snapTokens[idx].numeric ?? valueRef.current;
+      } else {
+        const mult = f.shiftStep && shift ? 10 : 1;
+        next = wrapValue(valueRef.current + direction * mult, cs.min, cs.max);
+      }
 
-    valueRef.current = next;
-    setValue(valueRef.current);
-    if (soundOn) {
-      const cycled = next !== prev && (direction > 0 ? next < prev : next > prev);
-      if (cycled) playSwoosh();
-      else playTick(held, direction > 0);
-    }
-  }, [f.shiftStep, slidesKey, soundOn]);
-
-  const triggerBudge = useCallback(
-    (dir: "up" | "down") => {
-      step(dir === "up" ? 1 : -1);
-      setActiveKey(dir);
-      setTimeout(() => setActiveKey(null), 100);
+      valueRef.current = next;
+      setValue(valueRef.current);
+      if (soundOn) {
+        const cycled = next !== prev && (direction > 0 ? next < prev : next > prev);
+        if (cycled) playSwoosh();
+        else playTick(held, direction > 0);
+      }
     },
-    [step],
+    [f.shiftStep, slidesKey, soundOn],
   );
 
-  const startHold = useCallback((dir: "up" | "down") => {
-    const d = dir === "up" ? 1 : -1;
-    step(d);
-    setActiveKey(dir);
-    clearTimeout(budgeTimeoutRef.current);
-    if (isBudging) {
-      setIsBudging(true);
-    }
-    clearTimeout(holdTimeoutRef.current);
-    clearInterval(holdIntervalRef.current);
-    holdTimeoutRef.current = setTimeout(() => {
-      holdIntervalRef.current = setInterval(() => {
-        step(d, false, true);
-      }, 50);
-    }, 300);
-  }, [step, isBudging]);
+  const startHold = useCallback(
+    (dir: "up" | "down") => {
+      const d = dir === "up" ? 1 : -1;
+      step(d);
+      setActiveKey(dir);
+      clearTimeout(budgeTimeoutRef.current);
+      if (isBudging) {
+        setIsBudging(true);
+      }
+      clearTimeout(holdTimeoutRef.current);
+      clearInterval(holdIntervalRef.current);
+      holdTimeoutRef.current = setTimeout(() => {
+        holdIntervalRef.current = setInterval(() => {
+          step(d, false, true);
+        }, 50);
+      }, 300);
+    },
+    [step, isBudging],
+  );
 
   const stopHold = useCallback(() => {
     clearTimeout(holdTimeoutRef.current);
@@ -726,12 +777,10 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
     valueRef.current = cs.original;
     setValue(cs.original);
     setIsBudging(true);
-    if (f.buttonFeedback) setPressedButton("reset");
     clearTimeout(budgeTimeoutRef.current);
     budgeTimeoutRef.current = setTimeout(() => setIsBudging(false), 600);
-    if (f.buttonFeedback) setTimeout(() => setPressedButton(null), 70);
     if (soundOn) playUndo();
-  }, [f.buttonFeedback, slidesKey, soundOn]);
+  }, [slidesKey, soundOn]);
 
   const copy = useCallback(() => {
     slideValuesRef.current[slideRef.current] = valueRef.current;
@@ -740,49 +789,43 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
       const value = slideValuesRef.current[idx] ?? slide.value;
       return {
         property: slide.property,
-        value: formatSlideValue(
-          slide,
-          value,
-          snapEnabledRef.current,
-          discoveredRef.current,
-        ),
+        value: formatSlideValue(slide, value, snapEnabledRef.current, discoveredRef.current),
         location: slideLocation(slide),
         changed: slideValueChanged(slide, value),
       };
     });
     const changedAssignments = allAssignments.filter((assignment) => assignment.changed);
-    const assignments = changedAssignments.length > 0
-      ? changedAssignments
-      : allAssignments.slice(slideRef.current, slideRef.current + 1);
+    const assignments =
+      changedAssignments.length > 0
+        ? changedAssignments
+        : allAssignments.slice(slideRef.current, slideRef.current + 1);
     const sharedLocation = assignments.every(
       (assignment) => assignment.location === assignments[0]?.location,
     )
-      ? assignments[0]?.location ?? ""
+      ? (assignments[0]?.location ?? "")
       : "";
 
-    const editPrompt = assignments.length === 1
-      ? `Set \`${assignments[0].property}\` to \`${assignments[0].value}\`${assignments[0].location}`
-      : [
-          `Set these properties${sharedLocation}:`,
-          ...assignments.map((assignment) => {
-            const location = sharedLocation ? "" : assignment.location;
-            return `- \`${assignment.property}\` to \`${assignment.value}\`${location}`;
-          }),
-        ].join("\n");
+    const editPrompt =
+      assignments.length === 1
+        ? `Set \`${assignments[0].property}\` to \`${assignments[0].value}\`${assignments[0].location}`
+        : [
+            `Set these properties${sharedLocation}:`,
+            ...assignments.map((assignment) => {
+              const location = sharedLocation ? "" : assignment.location;
+              return `- \`${assignment.property}\` to \`${assignment.value}\`${location}`;
+            }),
+          ].join("\n");
     const prompt = `${editPrompt}${promptElementContext(SLIDES)}`;
     navigator.clipboard?.writeText(prompt);
-    setShowPrompt(true);
     setConfirmed(true);
     setIsBudging(true);
-    if (f.buttonFeedback) setPressedButton("copy");
     clearTimeout(confirmedTimeoutRef.current);
     confirmedTimeoutRef.current = setTimeout(() => {
       setConfirmed(false);
       setIsBudging(false);
     }, 800);
-    if (f.buttonFeedback) setTimeout(() => setPressedButton(null), 70);
     if (soundOn) playConfirm();
-  }, [f.buttonFeedback, slidesKey, soundOn]);
+  }, [slidesKey, soundOn]);
 
   const toggleTokenSnap = useCallback(() => {
     const next = !snapEnabledRef.current;
@@ -822,29 +865,35 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
     }
   }, [reset, toggleTokenSnap]);
 
-  const appendPropertySearch = useCallback((char: string) => {
-    clearTimeout(propertySearchTimeoutRef.current);
-    clearTimeout(pendingShortcutTimeoutRef.current);
-    pendingShortcutRef.current = null;
+  const appendPropertySearch = useCallback(
+    (char: string) => {
+      clearTimeout(propertySearchTimeoutRef.current);
+      clearTimeout(pendingShortcutTimeoutRef.current);
+      pendingShortcutRef.current = null;
 
-    const nextQuery = `${propertySearchRef.current}${char}`;
-    propertySearchRef.current = nextQuery;
-    setPropertySearch(nextQuery);
+      const nextQuery = `${propertySearchRef.current}${char}`;
+      propertySearchRef.current = nextQuery;
+      setPropertySearch(nextQuery);
 
-    const nextSlide = bestSearchSlideIndex(slidesRef.current, nextQuery);
-    if (nextSlide >= 0) selectSlide(nextSlide);
+      const nextSlide = bestSearchSlideIndex(slidesRef.current, nextQuery);
+      if (nextSlide >= 0) selectSlide(nextSlide);
 
-    propertySearchTimeoutRef.current = setTimeout(clearPropertySearch, 1200);
-  }, [clearPropertySearch, selectSlide]);
+      propertySearchTimeoutRef.current = setTimeout(clearPropertySearch, 1200);
+    },
+    [clearPropertySearch, selectSlide],
+  );
 
-  const queueShortcutOrSearch = useCallback((char: string, shortcut: "reset" | "token") => {
-    pendingShortcutRef.current = shortcut;
-    propertySearchRef.current = char;
-    setPropertySearch(char);
-    clearTimeout(propertySearchTimeoutRef.current);
-    clearTimeout(pendingShortcutTimeoutRef.current);
-    pendingShortcutTimeoutRef.current = setTimeout(runPendingShortcut, 220);
-  }, [runPendingShortcut]);
+  const queueShortcutOrSearch = useCallback(
+    (char: string, shortcut: "reset" | "token") => {
+      pendingShortcutRef.current = shortcut;
+      propertySearchRef.current = char;
+      setPropertySearch(char);
+      clearTimeout(propertySearchTimeoutRef.current);
+      clearTimeout(pendingShortcutTimeoutRef.current);
+      pendingShortcutTimeoutRef.current = setTimeout(runPendingShortcut, 220);
+    },
+    [runPendingShortcut],
+  );
 
   const stepRef = useRef(step);
   stepRef.current = step;
@@ -895,7 +944,10 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
       } else if (hasPropertySearch && e.key === "Enter") {
         e.preventDefault();
         clearPropertySearchRef.current();
-      } else if (isPrintableSearchChar && (hasPropertySearch || !f.numberInput || e.key < "0" || e.key > "9")) {
+      } else if (
+        isPrintableSearchChar &&
+        (hasPropertySearch || !f.numberInput || e.key < "0" || e.key > "9")
+      ) {
         e.preventDefault();
         if (!hasPropertySearch && (e.key === "r" || e.key === "R")) {
           queueShortcutOrSearchRef.current(e.key, "reset");
@@ -967,11 +1019,9 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
         copyRef.current();
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        if (f.buttonFeedback) { setPressedButton("prev"); setTimeout(() => setPressedButton(null), 70); }
         goToSlideRef.current(-1);
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        if (f.buttonFeedback) { setPressedButton("next"); setTimeout(() => setPressedButton(null), 70); }
         goToSlideRef.current(1);
       }
     }
@@ -993,24 +1043,33 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
       clearTimeout(propertySearchTimeoutRef.current);
       clearTimeout(pendingShortcutTimeoutRef.current);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const displayNum = typedRaw !== null ? typedRaw : `${value}`;
   const displayUnit = s.unit;
-  const typedOutOfRange = typedRaw !== null && (() => {
-    const n = parseInt(typedRaw, 10);
-    return !isNaN(n) && (n < s.min || n > s.max);
-  })();
+  const typedOutOfRange =
+    typedRaw !== null &&
+    (() => {
+      const n = parseInt(typedRaw, 10);
+      return !isNaN(n) && (n < s.min || n > s.max);
+    })();
   const activeScale = resolveScale(s);
-  const activeSnapTokens = snapEnabled && activeScale && activeScale !== "color"
-    ? tokensForSlide(s, discoveredRef.current)
-    : null;
+  const activeSnapTokens =
+    snapEnabled && activeScale && activeScale !== "color"
+      ? tokensForSlide(s, discoveredRef.current)
+      : null;
   const matchedToken = activeSnapTokens ? matchToken(activeSnapTokens, value) : null;
   const isColorSlide = s.type === "color";
   const targetColor = `hsl(${value}, 70%, 55%)`;
   const budgeY = 0;
-  const baseScale = f.barPhysics ? (confirmed ? 1.02 : (isBudging || !slideRangeIdle || barHovered) ? 1 : 0.8) : 1;
+  const baseScale = f.barPhysics
+    ? confirmed
+      ? 1.02
+      : isBudging || !slideRangeIdle || barHovered
+        ? 1
+        : 0.8
+    : 1;
 
   const expandTransition =
     "max-width 0.5s cubic-bezier(0.32, 0.72, 0, 1), " +
@@ -1024,222 +1083,287 @@ export function Budge({ autoFocus, slides: slidesProp }: { autoFocus?: boolean; 
 
   return (
     <>
-    <div ref={wrapperRef} className="relative" data-budge-ui="">
-    <div
-      ref={containerRef}
-      tabIndex={0}
-      onPointerDown={() => containerRef.current?.focus()}
-      style={{ position: "fixed", bottom: 0, left: 0, right: 0, outline: "none", zIndex: 2147483646 }}
-    >
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-
+      <div ref={wrapperRef} className="relative" data-budge-ui="">
         <div
-          ref={barRef}
-          className="shrink-0"
-          onPointerEnter={() => setBarHovered(true)}
-          onPointerLeave={() => setBarHovered(false)}
+          ref={containerRef}
+          tabIndex={0}
+          onPointerDown={() => containerRef.current?.focus()}
           style={{
-            position: "relative",
-            display: "flex",
-            height: 37,
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 9999,
-            padding: "0 16px",
-            marginBottom: 24,
-            fontSynthesis: "none",
-            WebkitFontSmoothing: "antialiased",
-            userSelect: "none",
-            transform: `translateY(${budgeY}px) scale(${baseScale})`,
-            opacity: f.idleOpacity ? (isBudging || confirmed || !slideRangeIdle || barHovered ? 1 : 0.8) : 1,
-            transition: f.barPhysics
-              ? (confirmed
-                  ? "transform 0.3s cubic-bezier(0.2, 0, 0, 1.2), opacity 0.2s ease"
-                  : isBudging || barHovered || !slideRangeIdle
-                    ? "transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease"
-                    : "transform 0.2s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease")
-              : "opacity 0.3s ease",
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            outline: "2px solid transparent",
+            outlineOffset: 2,
+            zIndex: BUDGE_OVERLAY_Z_INDEX,
           }}
         >
-          <div style={{
-            position: "absolute",
-            bottom: "100%",
-            left: "50%",
-            pointerEvents: "none",
-            transform: `scale(${1 / baseScale}) translateX(-50%) translateY(${slideRangeVisible ? 0 : 8}px)`,
-            transformOrigin: "top left",
-            paddingBottom: 10,
-            opacity: slideRangeVisible ? 1 : 0,
-            filter: slideRangeVisible ? "blur(0px)" : "blur(4px)",
-            transition: slideRangeVisible
-              ? "opacity 0.2s ease, filter 0.2s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)"
-              : "opacity 0.25s ease, filter 0.25s ease, transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
-          }}>
-            <span style={{
-              fontFamily: FONT,
-              fontSize: 12,
-              fontWeight: 500,
-              color: toastLabel ? "#888" : "#666",
-              letterSpacing: "0.01em",
-              whiteSpace: "nowrap",
-            }}>
-              {labelText}
-            </span>
-          </div>
-          <div style={{
-            position: "absolute",
-            inset: 0,
-            borderRadius: 9999,
-            background: "#161616",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-            transformOrigin: activeKey === "up" ? "center bottom" : activeKey === "down" ? "center top" : "center center",
-            transform: `scaleY(${activeKey ? 1.012 : 1})`,
-            transition: activeKey
-              ? "transform 0.03s cubic-bezier(0, 0, 0.2, 1)"
-              : "transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
-          }} />
-          <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}>
-          {confirmed ? (
-            <span
-              key="copied"
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div
+              ref={barRef}
+              className="shrink-0"
+              onPointerEnter={() => setBarHovered(true)}
+              onPointerLeave={() => setBarHovered(false)}
               style={{
-                color: "#fff",
-                fontFamily: FONT,
-                fontWeight: 500,
-                fontSize: 14.5,
-                lineHeight: "22px",
-                whiteSpace: "nowrap",
-                animation: "budge-copied-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+                position: "relative",
+                display: "flex",
+                height: 37,
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 9999,
+                padding: "0 16px",
+                marginBottom: 24,
+                fontSynthesis: "none",
+                WebkitFontSmoothing: "antialiased",
+                userSelect: "none",
+                transform: `translateY(${budgeY}px) scale(${baseScale})`,
+                opacity: f.idleOpacity
+                  ? isBudging || confirmed || !slideRangeIdle || barHovered
+                    ? 1
+                    : 0.8
+                  : 1,
+                transition: f.barPhysics
+                  ? confirmed
+                    ? `transform 0.3s ${EASE_OUT_EXPO}, opacity 0.2s ease`
+                    : isBudging || barHovered || !slideRangeIdle
+                      ? `transform 0.25s ${EASE_OUT_EXPO}, opacity 0.15s ease`
+                      : "transform 0.2s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease"
+                  : "opacity 0.3s ease",
               }}
             >
-              Copied
-            </span>
-          ) : (
-            <>
               <div
                 style={{
-                  maxWidth: isBudging && !isColorSlide ? (matchedToken ? 170 : 100) : 0,
-                  marginRight: isBudging && !isColorSlide ? (matchedToken ? 9 : 1) : 0,
-                  opacity: isBudging && !isColorSlide ? 1 : 0,
-                  transition: isBudging
-                    ? expandTransition
-                    : collapseTransition,
-                  display: "flex",
-                  alignItems: "center",
-                  overflow: "visible",
+                  position: "absolute",
+                  bottom: "100%",
+                  left: "50%",
+                  pointerEvents: "none",
+                  transform: `scale(${1 / baseScale}) translateX(-50%) translateY(${slideRangeVisible ? 0 : 8}px)`,
+                  transformOrigin: "top left",
+                  paddingBottom: 10,
+                  opacity: slideRangeVisible ? 1 : 0,
+                  filter: slideRangeVisible ? "blur(0px)" : "blur(4px)",
+                  transition: slideRangeVisible
+                    ? `opacity 0.2s ease, filter 0.2s ease, transform 0.3s ${EASE_OUT_EXPO}`
+                    : "opacity 0.25s ease, filter 0.25s ease, transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
                 }}
               >
-{f.animatedDigits ? (
-                  <span style={{ display: "inline-flex", alignItems: "baseline", minWidth: 44, textAlign: "left" }}>
-                    <Calligraph
-                      variant="slots"
-                      animation="snappy"
-                      stagger={0}
-                      style={{
-                        color: typedOutOfRange ? "#A7A7A7" : "#fff",
-                        fontFamily: FONT,
-                        fontWeight: 500,
-                        fontSize: 14.5,
-                        lineHeight: "22px",
-                        whiteSpace: "nowrap",
-                        fontVariantNumeric: "tabular-nums",
-                        transition: "color 0.2s ease",
-                      }}
-                    >
-                      {displayNum}
-                    </Calligraph>
-                    <span style={{
-                      color: typedOutOfRange ? "#A7A7A7" : "#fff",
+                <span
+                  style={{
+                    fontFamily: FONT,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: toastLabel ? "#888" : "#666",
+                    letterSpacing: "0.01em",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {labelText}
+                </span>
+              </div>
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: 9999,
+                  background: "#161616",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                  transformOrigin:
+                    activeKey === "up"
+                      ? "center bottom"
+                      : activeKey === "down"
+                        ? "center top"
+                        : "center center",
+                  transform: `scaleY(${activeKey ? 1.012 : 1})`,
+                  transition: activeKey
+                    ? "transform 0.03s cubic-bezier(0, 0, 0.2, 1)"
+                    : `transform 0.4s ${EASE_OUT_EXPO}`,
+                }}
+              />
+              <div
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "100%",
+                  height: "100%",
+                }}
+              >
+                {confirmed ? (
+                  <span
+                    key="copied"
+                    style={{
+                      color: "#fff",
                       fontFamily: FONT,
                       fontWeight: 500,
-                      fontSize: 11,
+                      fontSize: 14.5,
                       lineHeight: "22px",
-                      transition: "color 0.2s ease",
-                      marginLeft: 1,
-                    }}>{displayUnit}</span>
-                    {matchedToken && (
-                      <span style={{
-                        color: "#A7A7A7",
-                        fontFamily: FONT,
-                        fontWeight: 500,
-                        fontSize: 11,
-                        lineHeight: "22px",
-                        marginLeft: 6,
-                        whiteSpace: "nowrap",
-                        display: "inline-block",
-                        minWidth: 32,
-                        textAlign: "left",
-                      }}>· {matchedToken.name}</span>
-                    )}
+                      whiteSpace: "nowrap",
+                      animation: `budge-copied-in 0.35s ${EASE_OUT_EXPO} both`,
+                    }}
+                  >
+                    Copied
                   </span>
                 ) : (
-                  <span style={{ display: "inline-flex", alignItems: "baseline", minWidth: 44, textAlign: "left" }}>
-                    <span
+                  <>
+                    <div
                       style={{
-                        color: typedOutOfRange ? "#A7A7A7" : "#fff",
-                        fontFamily: FONT,
-                        fontWeight: 500,
-                        fontSize: 14.5,
-                        lineHeight: "22px",
-                        whiteSpace: "nowrap",
-                        fontVariantNumeric: "tabular-nums",
-                        transition: "color 0.2s ease",
+                        maxWidth: isBudging && !isColorSlide ? (matchedToken ? 170 : 100) : 0,
+                        marginRight: isBudging && !isColorSlide ? (matchedToken ? 9 : 1) : 0,
+                        opacity: isBudging && !isColorSlide ? 1 : 0,
+                        transition: isBudging ? expandTransition : collapseTransition,
+                        display: "flex",
+                        alignItems: "center",
+                        overflow: "visible",
                       }}
                     >
-                      {displayNum}
-                    </span>
-                    <span style={{
-                      color: typedOutOfRange ? "#A7A7A7" : "#fff",
-                      fontFamily: FONT,
-                      fontWeight: 500,
-                      fontSize: 11,
-                      lineHeight: "22px",
-                      transition: "color 0.2s ease",
-                      marginLeft: 1,
-                    }}>{displayUnit}</span>
-                    {matchedToken && (
-                      <span style={{
-                        color: "#A7A7A7",
-                        fontFamily: FONT,
-                        fontWeight: 500,
-                        fontSize: 11,
-                        lineHeight: "22px",
-                        marginLeft: 6,
-                        whiteSpace: "nowrap",
-                        display: "inline-block",
-                        minWidth: 32,
-                        textAlign: "left",
-                      }}>· {matchedToken.name}</span>
-                    )}
-                  </span>
+                      {f.animatedDigits ? (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "baseline",
+                            minWidth: 44,
+                            textAlign: "left",
+                          }}
+                        >
+                          <Calligraph
+                            variant="slots"
+                            animation="snappy"
+                            stagger={0}
+                            style={{
+                              color: typedOutOfRange ? "#A7A7A7" : "#fff",
+                              fontFamily: FONT,
+                              fontWeight: 500,
+                              fontSize: 14.5,
+                              lineHeight: "22px",
+                              whiteSpace: "nowrap",
+                              fontVariantNumeric: "tabular-nums",
+                              transition: "color 0.2s ease",
+                            }}
+                          >
+                            {displayNum}
+                          </Calligraph>
+                          <span
+                            style={{
+                              color: typedOutOfRange ? "#A7A7A7" : "#fff",
+                              fontFamily: FONT,
+                              fontWeight: 500,
+                              fontSize: 12,
+                              lineHeight: "22px",
+                              transition: "color 0.2s ease",
+                              marginLeft: 1,
+                            }}
+                          >
+                            {displayUnit}
+                          </span>
+                          {matchedToken && (
+                            <span
+                              style={{
+                                color: "#A7A7A7",
+                                fontFamily: FONT,
+                                fontWeight: 500,
+                                fontSize: 12,
+                                lineHeight: "22px",
+                                marginLeft: 6,
+                                whiteSpace: "nowrap",
+                                display: "inline-block",
+                                minWidth: 32,
+                                textAlign: "left",
+                              }}
+                            >
+                              · {matchedToken.name}
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "baseline",
+                            minWidth: 44,
+                            textAlign: "left",
+                          }}
+                        >
+                          <span
+                            style={{
+                              color: typedOutOfRange ? "#A7A7A7" : "#fff",
+                              fontFamily: FONT,
+                              fontWeight: 500,
+                              fontSize: 14.5,
+                              lineHeight: "22px",
+                              whiteSpace: "nowrap",
+                              fontVariantNumeric: "tabular-nums",
+                              transition: "color 0.2s ease",
+                            }}
+                          >
+                            {displayNum}
+                          </span>
+                          <span
+                            style={{
+                              color: typedOutOfRange ? "#A7A7A7" : "#fff",
+                              fontFamily: FONT,
+                              fontWeight: 500,
+                              fontSize: 12,
+                              lineHeight: "22px",
+                              transition: "color 0.2s ease",
+                              marginLeft: 1,
+                            }}
+                          >
+                            {displayUnit}
+                          </span>
+                          {matchedToken && (
+                            <span
+                              style={{
+                                color: "#A7A7A7",
+                                fontFamily: FONT,
+                                fontWeight: 500,
+                                fontSize: 12,
+                                lineHeight: "22px",
+                                marginLeft: 6,
+                                whiteSpace: "nowrap",
+                                display: "inline-block",
+                                minWidth: 32,
+                                textAlign: "left",
+                              }}
+                            >
+                              · {matchedToken.name}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <Arrow
+                        down
+                        active={f.arrowBounce ? activeKey === "down" : false}
+                        onPointerDown={() => startHold("down")}
+                        onPointerUp={stopHold}
+                        onPointerLeave={stopHold}
+                        activeColor={isColorSlide ? targetColor : undefined}
+                      />
+                      <Arrow
+                        active={f.arrowBounce ? activeKey === "up" : false}
+                        onPointerDown={() => startHold("up")}
+                        onPointerUp={stopHold}
+                        onPointerLeave={stopHold}
+                        activeColor={isColorSlide ? targetColor : undefined}
+                      />
+                    </div>
+                  </>
                 )}
               </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <Arrow
-                  down
-                  active={f.arrowBounce ? activeKey === "down" : false}
-                  onPointerDown={() => startHold("down")}
-                  onPointerUp={stopHold}
-                  onPointerLeave={stopHold}
-                  activeColor={isColorSlide ? targetColor : undefined}
-                />
-                <Arrow
-                  active={f.arrowBounce ? activeKey === "up" : false}
-                  onPointerDown={() => startHold("up")}
-                  onPointerUp={stopHold}
-                  onPointerLeave={stopHold}
-                  activeColor={isColorSlide ? targetColor : undefined}
-                />
-              </div>
-            </>
-          )}
+            </div>
           </div>
         </div>
       </div>
-
-    </div>
-    </div>
     </>
   );
 }
