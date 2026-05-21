@@ -741,6 +741,7 @@ const BAR_CONTAINER_BASE_STYLE: CSSProperties = {
   padding: "0 16px",
   fontSynthesis: "none",
   WebkitFontSmoothing: "antialiased",
+  MozOsxFontSmoothing: "grayscale",
   pointerEvents: "auto",
   userSelect: "none",
 };
@@ -826,6 +827,7 @@ const TOAST_STYLE: CSSProperties = {
   zIndex: BUDGE_OVERLAY_Z_INDEX,
   pointerEvents: "none",
   WebkitFontSmoothing: "antialiased",
+  MozOsxFontSmoothing: "grayscale",
 };
 
 const ARROW_D =

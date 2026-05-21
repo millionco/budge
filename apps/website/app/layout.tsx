@@ -46,7 +46,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} light h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col antialiased">
         <TooltipProvider>{children}</TooltipProvider>
         <ReactGrab />
         <Budge />

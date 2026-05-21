@@ -40,6 +40,7 @@ const BAR_SHELL_BASE_STYLE: CSSProperties = {
   marginBottom: 24,
   fontSynthesis: "none",
   WebkitFontSmoothing: "antialiased",
+  MozOsxFontSmoothing: "grayscale",
   userSelect: "none",
 };
 

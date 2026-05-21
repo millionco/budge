@@ -31,7 +31,13 @@ const BAR_SHELL_BASE_STYLE: CSSProperties = {
   marginBottom: 24,
   fontSynthesis: "none",
   WebkitFontSmoothing: "antialiased",
+  MozOsxFontSmoothing: "grayscale",
   userSelect: "none",
+};
+
+const BUDGE_UI_ROOT_STYLE: CSSProperties = {
+  WebkitFontSmoothing: "antialiased",
+  MozOsxFontSmoothing: "grayscale",
 };
 
 const BAR_LABEL_BASE_STYLE: CSSProperties = {
@@ -1219,7 +1225,7 @@ export function Budge({
 
   return (
     <>
-      <div ref={wrapperRef} className="relative" data-budge-ui="">
+      <div ref={wrapperRef} className="relative" data-budge-ui="" style={BUDGE_UI_ROOT_STYLE}>
         <div
           ref={containerRef}
           tabIndex={0}
