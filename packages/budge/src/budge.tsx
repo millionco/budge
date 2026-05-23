@@ -759,8 +759,7 @@ function isBudgeActivationEvent(event: KeyboardEvent) {
     event.metaKey &&
     !event.ctrlKey &&
     !event.altKey &&
-    !event.shiftKey &&
-    !isFromBudgeUi(event.target)
+    !event.shiftKey
   );
 }
 
