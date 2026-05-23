@@ -302,29 +302,94 @@ function slideValueChanged(slide: BudgeSlide, value: number) {
   return Math.abs(value - slide.original) > 0.001;
 }
 
-function searchableSlideText(slide: BudgeSlide) {
-  return `${slide.label} ${slide.property}`.toLowerCase().replace(/[^a-z0-9]+/g, "");
+const TAILWIND_PREFIX_BY_PROPERTY: Record<string, string> = {
+  padding: "p",
+  "padding-top": "pt",
+  "padding-right": "pr",
+  "padding-bottom": "pb",
+  "padding-left": "pl",
+  "padding-inline-start": "ps",
+  "padding-inline-end": "pe",
+  "padding-bottom,padding-top": "py",
+  "padding-left,padding-right": "px",
+  margin: "m",
+  "margin-top": "mt",
+  "margin-right": "mr",
+  "margin-bottom": "mb",
+  "margin-left": "ml",
+  "margin-inline-start": "ms",
+  "margin-inline-end": "me",
+  "margin-bottom,margin-top": "my",
+  "margin-left,margin-right": "mx",
+  gap: "gap",
+  "row-gap": "gap-y",
+  "column-gap": "gap-x",
+  width: "w",
+  height: "h",
+  "min-width": "min-w",
+  "min-height": "min-h",
+  "max-width": "max-w",
+  "max-height": "max-h",
+  color: "text",
+  "font-size": "text",
+  "font-weight": "font",
+  "font-family": "font",
+  "line-height": "leading",
+  "letter-spacing": "tracking",
+  background: "bg",
+  "background-color": "bg",
+  "border-width": "border",
+  "border-top-width": "border-t",
+  "border-right-width": "border-r",
+  "border-bottom-width": "border-b",
+  "border-left-width": "border-l",
+  "border-color": "border",
+  "border-radius": "rounded",
+  "border-top-left-radius": "rounded-tl",
+  "border-top-right-radius": "rounded-tr",
+  "border-bottom-left-radius": "rounded-bl",
+  "border-bottom-right-radius": "rounded-br",
+  "z-index": "z",
+  top: "top",
+  right: "right",
+  bottom: "bottom",
+  left: "left",
+  inset: "inset",
+  opacity: "opacity",
+  "box-shadow": "shadow",
+  flex: "flex",
+  "flex-grow": "grow",
+  "flex-shrink": "shrink",
+  "flex-basis": "basis",
+  order: "order",
+};
+
+function tailwindClassesForSlide(slide: BudgeSlide): string[] {
+  const properties = propertiesForSlide(slide.property);
+  const classes: string[] = [];
+
+  if (properties.length > 1) {
+    const compoundKey = [...properties].sort().join(",");
+    const compoundShortcut = TAILWIND_PREFIX_BY_PROPERTY[compoundKey];
+    if (compoundShortcut) classes.push(compoundShortcut);
+  }
+
+  for (const property of properties) {
+    const prefix = TAILWIND_PREFIX_BY_PROPERTY[property];
+    if (prefix && !classes.includes(prefix)) classes.push(prefix);
+  }
+
+  return classes;
 }
 
 function normalizeSearchQuery(query: string) {
   return query.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-function fuzzyScore(query: string, text: string) {
-  if (!query) return 0;
-  const exact = text.indexOf(query);
-  if (exact >= 0) return 1000 - exact;
-
-  let score = 0;
-  let last = -1;
-  for (const char of query) {
-    const idx = text.indexOf(char, last + 1);
-    if (idx === -1) return -Infinity;
-    score += idx === last + 1 ? 12 : 4;
-    score -= idx * 0.1;
-    last = idx;
-  }
-  return score;
+function tailwindPrefixScore(query: string, prefix: string) {
+  if (prefix === query) return 2000;
+  if (prefix.startsWith(query)) return 1500 - prefix.length;
+  return -Infinity;
 }
 
 function bestSearchSlideIndex(slides: BudgeSlide[], query: string) {
@@ -334,10 +399,12 @@ function bestSearchSlideIndex(slides: BudgeSlide[], query: string) {
   let bestIndex = -1;
   let bestScore = -Infinity;
   slides.forEach((slide, index) => {
-    const score = fuzzyScore(normalized, searchableSlideText(slide));
-    if (score > bestScore) {
-      bestScore = score;
-      bestIndex = index;
+    for (const className of tailwindClassesForSlide(slide)) {
+      const score = tailwindPrefixScore(normalized, normalizeSearchQuery(className));
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
     }
   });
   return bestScore === -Infinity ? -1 : bestIndex;
